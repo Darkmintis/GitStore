@@ -78,7 +78,7 @@ def search_github_user(email: str, token: str | None) -> str | None:
 
 
 def resolve_handle(name: str, email: str, token: str | None) -> str | None:
-    """Try to find GitHub handle: first from noreply email, then via API search."""
+    """Try to find GitHub handle: noreply email → API search."""
     handle = github_handle_from_email(email)
     if handle:
         return handle
@@ -117,17 +117,11 @@ def format_credits(people: list[Contributor]) -> str:
     avatars = []
     for name, _, handle, _ in people:
         if handle:
-            avatars.append(
-                f'<a href="https://github.com/{handle}">'
-                f'<img src="https://github.com/{handle}.png?size=50" width="50" height="50" '
-                f'alt="{handle}" title="{handle}" /></a>'
-            )
+            avatars.append(f"[![@{handle}](https://github.com/{handle}.png?size=50)](https://github.com/{handle})")
         else:
-            avatars.append(
-                f'<img src="https://ui-avatars.com/api/?name={name.replace(" ", "+")}&size=50&background=random" '
-                f'width="50" height="50" alt="{name}" title="{name}" />'
-            )
-    return "\n---\n\n## Credits\n\n<p>\n" + "\n".join(avatars) + "\n</p>\n"
+            safe_name = name.replace(" ", "+")
+            avatars.append(f"![{name}](https://ui-avatars.com/api/?name={safe_name}&size=50&background=random)")
+    return "\n---\n\n## Contributors\n\n" + " ".join(avatars) + "\n"
 
 
 def main() -> None:
@@ -154,8 +148,7 @@ def self_check() -> None:
     body = format_credits(people)
     assert "github.com/alice" in body
     assert "github.com/bob" in body
-    assert "alice.png" in body
-    assert "bob.png" in body
+    assert "![@" in body
     print("ok")
 
 
