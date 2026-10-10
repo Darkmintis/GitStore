@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="GitStore.png" alt="Git Store Logo" width="150"/>
+  <img src="assets/GitStore-circle.png" alt="Git Store Logo" width="140"/>
 </p>
 
 <h1 align="center">Git Store</h1>
@@ -23,25 +23,23 @@ Git Store makes it easy to find and install Android apps published on GitHub. Br
 - View detailed repository information, releases, and changelogs
 - Star and save your favorite projects
 - GitHub OAuth integration for personalized experience
+- Browse the last loaded list when you are offline
 
 ## Installation
 
-Download the latest APK from [Releases](https://github.com/Darkmintis/Git-Store/releases)
+Download the latest APK from [Releases](https://github.com/Darkmintis/GitStore/releases)
+
+## Contributors
+
+<a href="https://github.com/Darkmintis/GitStore/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Darkmintis/GitStore" alt="Git Store contributors" width="140"/>
+</a>
 
 ## License
 
-**Apache License 2.0** - See [LICENSE](LICENSE) file for details
-
-Licensed under the Apache License, Version 2.0. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-This project incorporates code and concepts from multiple open source projects. See Credits section below for attribution.
-
-## Credits
-
-**Inspired by**: [komi-store](https://github.com/komi-store/komi-store) by [@rainxchzed](https://github.com/rainxchzed)
-
-This project is a reimagined version built with significant modifications, new features, and a different vision. We're grateful to the original project for the inspiration and foundation.
+Apache License 2.0 - [LICENSE](LICENSE).
 
 ---
 
-**Made with ❤️ by Darkmintis**
+An Android-focused app store inspired by [komi-store](https://github.com/komi-store/komi-store).
+
