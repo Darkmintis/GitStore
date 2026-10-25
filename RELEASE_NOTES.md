@@ -1,29 +1,25 @@
-# What's New in v1.4.0
+# What's New in v1.4.1
 
 ### New Features
-- **Multi-Language Translation** - on-the-fly app translation via MyMemory API with 16 supported languages
-- **Language Selector** - switch app language instantly from Settings
-- **Complete Localizations** - French, German, Spanish, Japanese, Russian, and Chinese
-- **Translation Disk Cache** - translated strings cached for offline use
-- **Download Manager** - view, track, and cancel active downloads from a new bottom tab
-- **Offline Detection** - animated banner warns when network is unavailable
-- **Batch Update Tracking** - see succeeded/failed counts when updating all apps
+- **CDN-Served Trending** - the discovered apps list now loads from a global CDN instead of GitHub's plain file server, so the Trending tab opens faster everywhere
+- **Offline Fallback** - the last successfully loaded list is kept on device, so Trending still renders when you have no connection instead of showing an empty screen
+- **Saved Results Notice** - a banner makes it clear when you are browsing cached data and which actions need a connection
 
 ### Improvements
-- Polished top app bar and home bar layout
-- Tab scroll content stays above bottom navigation
-- Translation retry with corrected German and Spanish strings
-- Support Us section hidden behind feature flag
-- More Apps header links to darkmintis.dev
+- Trending fetch errors no longer fall through to the live GitHub API more than necessary
+- Reduced logging noise on the trending fetch path
+- French locale now carries the new cached-results string
 
 ### Bug Fixes
-- Fixed translation retry after failure
-- Corrected German and Spanish format string escaping
-- Hardened translation with disk cache fallback
-- Language picker limited to supported locales
+- Fixed a lost trailing space in the German "More Apps by Darkmintis" label that could join two words together
+- Restored full 281-string parity across all seven locales
+- "Update all" now reports the correct number of successfully updated apps
+- Downloads are now cleaned up when you leave the screen instead of leaving partial APKs behind
+- Fixed a rare crash when a finished download reported no local file path
+- The in-app updater no longer offers the version you are already running
 
 ### Under the Hood
-- TranslationRepository and TranslationService architecture
-- LocalizationManager for dynamic string switching
-- ContentLanguageDetector for automatic language detection
-- Contributor credits script for GitHub releases
+- Trending seed list now resolves through `CachedTrendingDataSource.loadTrending()`, returning a typed result that distinguishes offline from missing data
+- Disk cache stored in `cacheDir/trending_apps.json`, reclaimable by the OS without losing authoritative data
+- Install/uninstall cleanup runs on a scope that survives the ViewModel, so cancellation cannot strand files
+- Release version name and code are derived from the git tag in CI; local builds fall back to the values in `app/build.gradle.kts`
