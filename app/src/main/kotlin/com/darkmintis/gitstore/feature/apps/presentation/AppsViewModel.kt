@@ -6,8 +6,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,6 +53,12 @@ class AppsViewModel(
     private val activeUpdates = mutableMapOf<String, Job>()
     private var updateAllJob: Job? = null
     private var isBatchUpdating = false
+
+    /**
+     * Outlives the ViewModel so cleanup that must happen after [onCleared] (when
+     * viewModelScope is already cancelled) can still run.
+     */
+    private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _state = MutableStateFlow(AppsState())
     val state = _state
@@ -356,7 +365,9 @@ class AppsViewModel(
 
             } catch (e: CancellationException) {
                 Logger.d { "Update cancelled for ${app.packageName}" }
-                cleanupUpdate(app.packageName, app.latestAssetName)
+                withContext(NonCancellable) {
+                    cleanupUpdate(app.packageName, app.latestAssetName)
+                }
                 updateAppState(app.packageName, UpdateState.Idle)
                 throw e
             } catch (e: Exception) {
@@ -605,14 +616,15 @@ class AppsViewModel(
         updateAllJob?.cancel()
         activeUpdates.values.forEach { it.cancel() }
 
-        viewModelScope.launch {
-            _state.value.apps.forEach { appItem ->
-                if (appItem.updateState != UpdateState.Idle &&
-                    appItem.updateState != UpdateState.Success
-                ) {
-                    appItem.installedApp.latestAssetName?.let { assetName ->
-                        downloader.cancelDownload(assetName)
-                    }
+        // viewModelScope is already cancelled here, so cleanup has to run on its own scope.
+        val pendingAssetNames = _state.value.apps
+            .filter { it.updateState != UpdateState.Idle && it.updateState != UpdateState.Success }
+            .mapNotNull { it.installedApp.latestAssetName }
+
+        if (pendingAssetNames.isNotEmpty()) {
+            cleanupScope.launch {
+                pendingAssetNames.forEach { assetName ->
+                    runCatching { downloader.cancelDownload(assetName) }
                 }
             }
         }
