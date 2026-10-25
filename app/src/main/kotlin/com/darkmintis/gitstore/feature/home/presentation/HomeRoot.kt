@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -168,6 +169,14 @@ fun HomeScreen(
         ) {
             FilterChips(state, onAction)
 
+            if (state.isShowingCachedData && state.repos.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                CachedDataNotice(
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+            }
+
             Box(Modifier.fillMaxSize()) {
                 LoadingState(state)
 
@@ -264,6 +273,36 @@ private fun MainState(
                 }
             }
         }
+    }
+}
+
+/**
+ * Shown when the visible list came from disk. Browsing still works, but installs need a
+ * connection, so the notice says exactly that instead of silently pretending all is well.
+ */
+@Composable
+private fun CachedDataNotice(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.tertiaryContainer)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.WifiOff,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onTertiaryContainer
+        )
+
+        Text(
+            text = stringResource(R.string.showing_cached_trending),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
+            modifier = Modifier.padding(start = 8.dp)
+        )
     }
 }
 

@@ -359,6 +359,7 @@
 
     <!-- Shared empty / offline / downloads polish -->
     <string name="you_are_offline">您当前离线</string>
+    <string name="showing_cached_trending">Showing saved results - connect to download or install</string>
     <string name="no_downloads_yet">暂无下载</string>
     <string name="no_downloads_yet_message">已下载的 APK 会显示在这里，供安装或清理。</string>
     <string name="install">安装</string>

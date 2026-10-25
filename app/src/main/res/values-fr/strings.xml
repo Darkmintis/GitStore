@@ -355,6 +355,7 @@
 
     <!-- Shared empty / offline / downloads polish -->
     <string name="you_are_offline">Vous êtes hors ligne</string>
+    <string name="showing_cached_trending">Affichage des résultats enregistrés - connectez-vous pour télécharger ou installer</string>
     <string name="no_downloads_yet">Aucun téléchargement</string>
     <string name="no_downloads_yet_message">Les APKs téléchargés apparaîtront ici.</string>
     <string name="install">Installer</string>

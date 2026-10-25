@@ -15,5 +15,7 @@ data class HomeState(
     val currentCategory: HomeCategory = HomeCategory.TRENDING,
     val isAppsSectionVisible: Boolean = true,
     val isUpdateAvailable: Boolean = false,
+    /** True when the visible list was served from disk rather than the network. */
+    val isShowingCachedData: Boolean = false,
 )
 
