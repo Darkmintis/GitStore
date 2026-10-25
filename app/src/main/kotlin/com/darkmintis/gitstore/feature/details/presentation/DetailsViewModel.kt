@@ -553,10 +553,6 @@ class DetailsViewModel(
             is DetailsAction.OpenDeveloperProfile -> {
                 // Handled in composable
             }
-
-            is DetailsAction.OnMessage -> {
-                // Handled in composable
-            }
         }
     }
 
