@@ -17,5 +17,7 @@ data class HomeState(
     val isUpdateAvailable: Boolean = false,
     /** True when the visible list was served from disk rather than the network. */
     val isShowingCachedData: Boolean = false,
+    /** Timestamp of the saved snapshot backing the visible list, when there is one. */
+    val cachedUpdatedAt: String? = null,
 )
 

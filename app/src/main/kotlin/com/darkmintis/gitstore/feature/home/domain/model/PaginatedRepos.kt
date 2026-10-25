@@ -7,6 +7,8 @@ data class PaginatedRepos(
     val hasMore: Boolean,
     val nextPageIndex: Int,
     val totalCount: Int? = null,
-    val isFromCache: Boolean = false
+    val isFromCache: Boolean = false,
+    /** When [isFromCache] is true, the timestamp of the saved snapshot. */
+    val cachedUpdatedAt: String? = null
 )
 

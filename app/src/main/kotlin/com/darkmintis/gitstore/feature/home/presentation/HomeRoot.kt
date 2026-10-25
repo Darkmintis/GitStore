@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Search
@@ -37,6 +38,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -76,8 +78,10 @@ import com.darkmintis.gitstore.core.presentation.components.GithubStoreButton
 import com.darkmintis.gitstore.core.presentation.components.RepositoryCard
 import com.darkmintis.gitstore.core.presentation.components.RetryErrorState
 import com.darkmintis.gitstore.core.presentation.theme.GithubStoreTheme
+import com.darkmintis.gitstore.core.presentation.utils.formatUpdatedAt
 import com.darkmintis.gitstore.feature.home.presentation.components.HomeFilterChips
 import com.darkmintis.gitstore.feature.home.presentation.model.HomeCategory
+import kotlinx.datetime.Instant as DateInstant
 
 @Composable
 fun HomeRoot(
@@ -173,6 +177,8 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 CachedDataNotice(
+                    savedAt = state.cachedUpdatedAt,
+                    onRetry = { onAction(HomeAction.Refresh) },
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
             }
@@ -278,16 +284,25 @@ private fun MainState(
 
 /**
  * Shown when the visible list came from disk. Browsing still works, but installs need a
- * connection, so the notice says exactly that instead of silently pretending all is well.
+ * connection, so the notice says exactly that, shows how old the snapshot is, and offers a
+ * retry instead of silently pretending all is well.
  */
 @Composable
-private fun CachedDataNotice(modifier: Modifier = Modifier) {
+private fun CachedDataNotice(
+    savedAt: String?,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val savedLabel = savedAt?.let { iso ->
+        if (runCatching { DateInstant.parse(iso) }.isSuccess) formatUpdatedAt(iso) else null
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(CircleShape)
+            .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.tertiaryContainer)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(start = 12.dp, top = 8.dp, end = 4.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -297,12 +312,34 @@ private fun CachedDataNotice(modifier: Modifier = Modifier) {
             tint = MaterialTheme.colorScheme.onTertiaryContainer
         )
 
-        Text(
-            text = stringResource(R.string.showing_cached_trending),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onTertiaryContainer,
-            modifier = Modifier.padding(start = 8.dp)
-        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 8.dp, end = 4.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.showing_cached_trending),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+
+            if (savedLabel != null) {
+                Text(
+                    text = savedLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.72f),
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+
+        TextButton(onClick = onRetry) {
+            Text(
+                text = stringResource(R.string.retry),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+        }
     }
 }
 

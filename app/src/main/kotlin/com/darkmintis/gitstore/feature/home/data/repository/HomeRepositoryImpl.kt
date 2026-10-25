@@ -66,7 +66,8 @@ class HomeRepositoryImpl(
                         repos = repos,
                         hasMore = false,
                         nextPageIndex = 2,
-                        isFromCache = cachedData.isFromDiskCache
+                        isFromCache = cachedData.isFromDiskCache,
+                        cachedUpdatedAt = cachedData.lastUpdated
                     )
                 )
 
