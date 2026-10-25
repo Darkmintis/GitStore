@@ -17,10 +17,13 @@ import java.net.PortUnreachableException
 import java.net.UnknownHostException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlin.time.Duration.Companion.hours
 import com.darkmintis.gitstore.core.domain.model.GithubRepoSummary
 import com.darkmintis.gitstore.core.domain.model.GithubUser
 
@@ -29,6 +32,24 @@ import com.darkmintis.gitstore.core.domain.model.GithubUser
  * OS can reclaim it under storage pressure without losing any authoritative data.
  */
 const val TRENDING_CACHE_FILE_NAME = "trending_apps.json"
+
+/**
+ * The seed list is regenerated daily, so a snapshot older than this is no longer a meaningful
+ * fallback. Serving it would present stale content as if it were current.
+ */
+private val MAX_CACHE_AGE = 48.hours
+
+/**
+ * A saved snapshot is only useful while it is recent enough to still reflect the daily list.
+ * Missing, blank, or malformed timestamps are treated as stale rather than trusted.
+ */
+internal fun isSnapshotFresh(
+    lastUpdated: String,
+    now: Instant = Clock.System.now()
+): Boolean {
+    val updated = runCatching { Instant.parse(lastUpdated) }.getOrNull() ?: return false
+    return (now - updated) <= MAX_CACHE_AGE
+}
 
 /**
  * Serves the daily discovered trending list from jsDelivr and keeps a disk copy so the
@@ -145,23 +166,35 @@ class CachedTrendingDataSource(
             if (cacheFile.exists()) cacheFile.readText() else null
         }.getOrNull() ?: return null
 
-        return runCatching {
+        val cached = runCatching {
             json.decodeFromString<CachedRepoResponse>(text)
         }.getOrNull()
             ?.takeIf { it.repositories.isNotEmpty() }
-            ?.let {
-                TrendingResult(
-                    repos = it.repositories,
-                    lastUpdated = it.lastUpdated,
-                    isFromDiskCache = true
-                )
+            ?: return null
+
+        if (!isSnapshotFresh(cached.lastUpdated)) {
+            Logger.d {
+                "Discarding stale trending cache (last updated ${
+                    cached.lastUpdated.ifBlank { "unknown" }
+                })"
             }
+            return null
+        }
+
+        return TrendingResult(
+            repos = cached.repositories,
+            lastUpdated = cached.lastUpdated,
+            isFromDiskCache = true
+        )
     }
 
     private fun writeCache(result: TrendingResult) {
         runCatching {
             val payload = CachedRepoResponse(
-                lastUpdated = result.lastUpdated.orEmpty(),
+                // Stamp the write time when the payload itself has no usable timestamp so the
+                // entry is not immediately considered stale on the next launch.
+                lastUpdated = result.lastUpdated?.takeIf { it.isNotBlank() }
+                    ?: Clock.System.now().toString(),
                 totalCount = result.repos.size,
                 repositories = result.repos
             )
