@@ -359,6 +359,7 @@ Erlebnis frei
 
     <!-- Shared empty / offline / downloads polish -->
     <string name="you_are_offline">Du bist Offline</string>
+    <string name="showing_cached_trending">Showing saved results - connect to download or install</string>
     <string name="no_downloads_yet">Noch keine Downloads</string>
     <string name="no_downloads_yet_message">Heruntergeladene APKs werden hier zur Installation oder Bereinigung angezeigt.</string>
     <string name="install">Installieren</string>

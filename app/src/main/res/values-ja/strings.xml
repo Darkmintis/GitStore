@@ -359,6 +359,7 @@
 
     <!-- Shared empty / offline / downloads polish -->
     <string name="you_are_offline">オフラインです</string>
+    <string name="showing_cached_trending">Showing saved results - connect to download or install</string>
     <string name="no_downloads_yet">ダウンロードはまだありません</string>
     <string name="no_downloads_yet_message">ダウンロードした APK はここに表示され、インストールや削除ができます。</string>
     <string name="install">インストール</string>

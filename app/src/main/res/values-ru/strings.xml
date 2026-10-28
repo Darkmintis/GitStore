@@ -359,6 +359,7 @@
 
     <!-- Shared empty / offline / downloads polish -->
     <string name="you_are_offline">Вы не в сети</string>
+    <string name="showing_cached_trending">Showing saved results - connect to download or install</string>
     <string name="no_downloads_yet">Загрузок пока нет</string>
     <string name="no_downloads_yet_message">Загруженные APK появятся здесь для установки или удаления.</string>
     <string name="install">Установить</string>

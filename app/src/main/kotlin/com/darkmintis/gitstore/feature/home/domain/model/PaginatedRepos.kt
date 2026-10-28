@@ -6,6 +6,9 @@ data class PaginatedRepos(
     val repos: List<GithubRepoSummary>,
     val hasMore: Boolean,
     val nextPageIndex: Int,
-    val totalCount: Int? = null
+    val totalCount: Int? = null,
+    val isFromCache: Boolean = false,
+    /** When [isFromCache] is true, the timestamp of the saved snapshot. */
+    val cachedUpdatedAt: String? = null
 )
 

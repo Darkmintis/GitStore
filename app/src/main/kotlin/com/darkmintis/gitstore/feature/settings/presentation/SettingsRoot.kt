@@ -17,7 +17,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -57,12 +56,12 @@ fun SettingsRoot(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
+    val logoutSuccessMessage = stringResource(R.string.logout_success)
     ObserveAsEvents(viewModel.events) { event ->
         when (event) {
             SettingsEvent.OnLogoutSuccessful -> {
                 coroutineScope.launch {
-                    snackbarState.showSnackbar(context.getString(R.string.logout_success))
+                    snackbarState.showSnackbar(logoutSuccessMessage)
 
                     onNavigateBack()
                 }

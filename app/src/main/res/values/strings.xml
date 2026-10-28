@@ -358,6 +358,7 @@
 
     <!-- Shared empty / offline / downloads polish -->
     <string name="you_are_offline">You are offline</string>
+    <string name="showing_cached_trending">Showing saved results - connect to download or install</string>
     <string name="no_downloads_yet">No downloads yet</string>
     <string name="no_downloads_yet_message">Downloaded APKs will appear here for install or cleanup.</string>
     <string name="install">Install</string>

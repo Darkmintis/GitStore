@@ -119,7 +119,9 @@ class HomeViewModel(
                     isLoadingMore = !isInitial,
                     errorMessage = null,
                     currentCategory = targetCategory,
-                    repos = if (isInitial) emptyList() else it.repos
+                    repos = if (isInitial) emptyList() else it.repos,
+                    isShowingCachedData = false,
+                    cachedUpdatedAt = null
                 )
             }
 
@@ -171,6 +173,8 @@ class HomeViewModel(
                         currentState.copy(
                             repos = uniqueList,
                             hasMorePages = paginatedRepos.hasMore,
+                            isShowingCachedData = paginatedRepos.isFromCache,
+                            cachedUpdatedAt = paginatedRepos.cachedUpdatedAt,
                             errorMessage = if (uniqueList.isEmpty() && !paginatedRepos.hasMore) {
                                 application.getString(R.string.no_repositories_found)
                             } else null

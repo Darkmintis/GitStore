@@ -65,15 +65,17 @@ fun App(
     }
 
     val context = LocalContext.current
-    val localizedContext = remember(context, currentLocale) {
-        val config = Configuration(context.resources.configuration)
+    val configuration = LocalConfiguration.current
+
+    val localizedContext = remember(context, configuration, currentLocale) {
+        val config = Configuration(configuration)
         config.setLocale(currentLocale)
         config.setLayoutDirection(currentLocale)
         context.createConfigurationContext(config)
     }
 
-    val localizedConfiguration = remember(context, currentLocale) {
-        Configuration(context.resources.configuration).apply {
+    val localizedConfiguration = remember(configuration, currentLocale) {
+        Configuration(configuration).apply {
             setLocale(currentLocale)
             setLayoutDirection(currentLocale)
         }
