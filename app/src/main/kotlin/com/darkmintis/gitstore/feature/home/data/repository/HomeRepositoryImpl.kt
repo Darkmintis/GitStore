@@ -72,14 +72,20 @@ class HomeRepositoryImpl(
                 )
 
                 return@flow
+            } else if (cachedData.isOffline) {
+                // No seed list and no connection — skip the live search (it will only fail).
+                Logger.d { "No cached trending data available while offline" }
+                emit(
+                    PaginatedRepos(
+                        repos = emptyList(),
+                        hasMore = false,
+                        nextPageIndex = 2,
+                        isOffline = true
+                    )
+                )
+                return@flow
             } else {
-                Logger.d {
-                    if (cachedData.isOffline) {
-                        "No cached trending data available while offline"
-                    } else {
-                        "No cached data available, falling back to live API"
-                    }
-                }
+                Logger.d { "No cached data available, falling back to live API" }
             }
         }
 

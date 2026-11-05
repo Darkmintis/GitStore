@@ -173,7 +173,8 @@ val homeModule: Module = module {
             installedAppsRepository = get(),
             syncInstalledAppsUseCase = get(),
             favouritesRepository = get(),
-            starredRepository = get()
+            starredRepository = get(),
+            connectivityObserver = get()
         )
     }
 }

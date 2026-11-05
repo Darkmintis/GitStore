@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import android.app.Application
 import com.darkmintis.gitstore.core.presentation.utils.AndroidStringProvider
+import com.darkmintis.gitstore.core.presentation.utils.ConnectivityObserver
 import com.darkmintis.gitstore.core.presentation.utils.ErrorMapper
 import com.darkmintis.gitstore.core.data.local.db.entities.FavoriteRepo
 import com.darkmintis.gitstore.core.domain.repository.FavouritesRepository
@@ -33,6 +34,7 @@ class HomeViewModel(
     private val syncInstalledAppsUseCase: SyncInstalledAppsUseCase,
     private val favouritesRepository: FavouritesRepository,
     private val starredRepository: StarredRepository,
+    private val connectivityObserver: ConnectivityObserver,
 ) : ViewModel() {
 
     private val stringProvider = AndroidStringProvider(application)
@@ -125,6 +127,20 @@ class HomeViewModel(
                 )
             }
 
+            // New/Popular need the live API — skip the slow timeout path when offline.
+            // Trending has its own CDN + disk fallback inside the repository.
+            if (targetCategory != HomeCategory.TRENDING && !connectivityObserver.isOnline.first()) {
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        isLoadingMore = false,
+                        errorMessage = stringProvider.getString(R.string.error_offline),
+                        repos = if (isInitial) emptyList() else it.repos
+                    )
+                }
+                return@launch
+            }
+
             try {
                 val flow = when (targetCategory) {
                     HomeCategory.TRENDING -> homeRepository.getTrendingRepositories(nextPageIndex)
@@ -175,9 +191,15 @@ class HomeViewModel(
                             hasMorePages = paginatedRepos.hasMore,
                             isShowingCachedData = paginatedRepos.isFromCache,
                             cachedUpdatedAt = paginatedRepos.cachedUpdatedAt,
-                            errorMessage = if (uniqueList.isEmpty() && !paginatedRepos.hasMore) {
-                                application.getString(R.string.no_repositories_found)
-                            } else null
+                            errorMessage = when {
+                                uniqueList.isEmpty() && paginatedRepos.isOffline -> {
+                                    stringProvider.getString(R.string.error_offline)
+                                }
+                                uniqueList.isEmpty() && !paginatedRepos.hasMore -> {
+                                    stringProvider.getString(R.string.no_repositories_found)
+                                }
+                                else -> null
+                            }
                         )
                     }
                 }

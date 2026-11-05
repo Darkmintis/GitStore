@@ -45,8 +45,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -75,13 +77,15 @@ import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 import com.darkmintis.gitstore.app.navigation.LocalBottomNavigationLiquid
 import com.darkmintis.gitstore.core.presentation.components.GithubStoreButton
+import com.darkmintis.gitstore.core.presentation.components.OfflineAwareErrorState
 import com.darkmintis.gitstore.core.presentation.components.RepositoryCard
-import com.darkmintis.gitstore.core.presentation.components.RetryErrorState
 import com.darkmintis.gitstore.core.presentation.theme.GithubStoreTheme
+import com.darkmintis.gitstore.core.presentation.utils.ConnectivityObserver
 import com.darkmintis.gitstore.core.presentation.utils.formatUpdatedAt
 import com.darkmintis.gitstore.feature.home.presentation.components.HomeFilterChips
 import com.darkmintis.gitstore.feature.home.presentation.model.HomeCategory
 import kotlinx.datetime.Instant as DateInstant
+import org.koin.compose.koinInject
 
 @Composable
 fun HomeRoot(
@@ -134,6 +138,8 @@ fun HomeScreen(
 ) {
     val listState = rememberLazyStaggeredGridState()
     val liquidState = LocalBottomNavigationLiquid.current
+    val connectivityObserver: ConnectivityObserver = koinInject()
+    val isOnline by connectivityObserver.isOnline.collectAsStateWithLifecycle(initialValue = true)
 
     val shouldLoadMore by remember {
         derivedStateOf {
@@ -155,6 +161,21 @@ fun HomeScreen(
     LaunchedEffect(shouldLoadMore) {
         if (shouldLoadMore) {
             currentOnAction(HomeAction.LoadMore)
+        }
+    }
+
+    // Refresh saved/cached trending once when connectivity returns.
+    var sawOfflineWhileCached by remember { mutableStateOf(false) }
+    LaunchedEffect(isOnline, state.isShowingCachedData) {
+        if (state.isShowingCachedData) {
+            if (!isOnline) {
+                sawOfflineWhileCached = true
+            } else if (sawOfflineWhileCached) {
+                sawOfflineWhileCached = false
+                currentOnAction(HomeAction.Refresh)
+            }
+        } else {
+            sawOfflineWhileCached = false
         }
     }
 
@@ -372,7 +393,7 @@ private fun ErrorState(
     onAction: (HomeAction) -> Unit
 ) {
     if (state.errorMessage != null && state.repos.isEmpty()) {
-        RetryErrorState(
+        OfflineAwareErrorState(
             title = stringResource(R.string.home_failed_to_load_repositories),
             message = state.errorMessage,
             onRetry = { onAction(HomeAction.Retry) },

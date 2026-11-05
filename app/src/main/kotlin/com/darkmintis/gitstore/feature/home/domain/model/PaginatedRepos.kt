@@ -9,6 +9,8 @@ data class PaginatedRepos(
     val totalCount: Int? = null,
     val isFromCache: Boolean = false,
     /** When [isFromCache] is true, the timestamp of the saved snapshot. */
-    val cachedUpdatedAt: String? = null
+    val cachedUpdatedAt: String? = null,
+    /** True when the seed list could not be loaded because the device is offline. */
+    val isOffline: Boolean = false,
 )
 
