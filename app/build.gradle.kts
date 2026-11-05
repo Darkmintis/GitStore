@@ -206,6 +206,12 @@ configurations.all {
         force("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
         force("org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.1.0")
         force("org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.1.0")
+
+        // androidx.test 1.7 / espresso 3.7 require concurrent-futures 1.2.0, while the app
+        // graph still resolves 1.1.0. The androidx.concurrent artifacts form an atomic group,
+        // so androidTest compile and runtime cannot disagree after consistent resolution.
+        force("androidx.concurrent:concurrent-futures:1.2.0")
+        force("androidx.concurrent:concurrent-futures-ktx:1.2.0")
     }
 }
 
