@@ -17,10 +17,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.OpenInBrowser
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -56,10 +54,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.res.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 import com.darkmintis.gitstore.core.presentation.components.GithubStoreBodyText
-import com.darkmintis.gitstore.core.presentation.components.GithubStoreButtonText
 import com.darkmintis.gitstore.core.presentation.components.GithubStoreTopBarTitle
 import com.darkmintis.gitstore.core.presentation.components.GithubStoreTitleText
-import com.darkmintis.gitstore.core.presentation.components.ReportIssueButton
+import com.darkmintis.gitstore.core.presentation.components.OfflineAwareErrorState
 import com.darkmintis.gitstore.feature.developer_profile.domain.model.RepoFilterType
 import com.darkmintis.gitstore.feature.developer_profile.presentation.components.DeveloperRepoItem
 import com.darkmintis.gitstore.feature.developer_profile.presentation.components.FilterSortControls
@@ -321,38 +318,12 @@ private fun ErrorContent(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier.padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = Icons.Default.Error,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.error
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        GithubStoreTitleText(
-            text = stringResource(R.string.error_generic, message),
-            maxLines = 3,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(onClick = onRetry) {
-            GithubStoreButtonText(
-                text = stringResource(R.string.retry)
-            )
-        }
-
-        if (message == stringResource(R.string.error_unknown)) {
-            ReportIssueButton()
-        }
-    }
+    OfflineAwareErrorState(
+        title = stringResource(R.string.failed_to_load_profile),
+        message = message,
+        onRetry = onRetry,
+        modifier = modifier
+    )
 }
 
 

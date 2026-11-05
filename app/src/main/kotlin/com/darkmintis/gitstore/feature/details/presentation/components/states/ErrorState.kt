@@ -16,7 +16,7 @@ import androidx.compose.ui.text.style.TextAlign
 
 
 import androidx.compose.ui.res.stringResource
-import com.darkmintis.gitstore.core.presentation.components.RetryErrorState
+import com.darkmintis.gitstore.core.presentation.components.OfflineAwareErrorState
 import com.darkmintis.gitstore.feature.details.presentation.DetailsAction
 
 @Composable
@@ -24,7 +24,7 @@ fun ErrorState(
     errorMessage: String,
     onAction: (DetailsAction) -> Unit
 ) {
-    RetryErrorState(
+    OfflineAwareErrorState(
         title = stringResource(R.string.error_loading_details),
         message = errorMessage,
         onRetry = { onAction(DetailsAction.Retry) }

@@ -73,8 +73,8 @@ import org.koin.compose.viewmodel.koinViewModel
 import com.darkmintis.gitstore.core.domain.model.GithubRepoSummary
 import com.darkmintis.gitstore.core.presentation.components.EmptyState
 import com.darkmintis.gitstore.core.presentation.components.LoadingState
+import com.darkmintis.gitstore.core.presentation.components.OfflineAwareErrorState
 import com.darkmintis.gitstore.core.presentation.components.RepositoryCard
-import com.darkmintis.gitstore.core.presentation.components.RetryErrorState
 import com.darkmintis.gitstore.core.presentation.theme.GithubStoreTheme
 import com.darkmintis.gitstore.feature.search.domain.model.ProgrammingLanguage
 import com.darkmintis.gitstore.feature.search.domain.model.SortBy
@@ -297,7 +297,7 @@ fun SearchScreen(
                     }
 
                     state.errorMessage != null && state.repositories.isEmpty() -> {
-                        RetryErrorState(
+                        OfflineAwareErrorState(
                             title = stringResource(R.string.search_failed),
                             message = state.errorMessage!!,
                             onRetry = { onAction(SearchAction.Retry) }
