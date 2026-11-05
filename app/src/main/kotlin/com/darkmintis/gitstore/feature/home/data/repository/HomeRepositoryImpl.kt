@@ -48,21 +48,41 @@ class HomeRepositoryImpl(
         if (page == 1) {
             Logger.d { "Attempting to load cached trending repositories..." }
 
-            val cachedData = cachedDataSource.getCachedTrendingRepos()
+            val cachedData = cachedDataSource.loadTrending()
 
-            if (cachedData != null && cachedData.repositories.isNotEmpty()) {
-                Logger.d { "Using cached data: ${cachedData.repositories.size} repos" }
+            if (cachedData.hasData) {
+                Logger.d {
+                    buildString {
+                        append("Using trending data: ${cachedData.repos.size} repos")
+                        if (cachedData.isFromDiskCache) append(" (disk cache)")
+                        if (cachedData.isOffline) append(" (offline)")
+                    }
+                }
 
-                val repos = cachedData.repositories.map { it.toGithubRepoSummary() }
+                val repos = cachedData.repos.map { it.toGithubRepoSummary() }
 
                 emit(
                     PaginatedRepos(
                         repos = repos,
                         hasMore = false,
-                        nextPageIndex = 2
+                        nextPageIndex = 2,
+                        isFromCache = cachedData.isFromDiskCache,
+                        cachedUpdatedAt = cachedData.lastUpdated
                     )
                 )
 
+                return@flow
+            } else if (cachedData.isOffline) {
+                // No seed list and no connection — skip the live search (it will only fail).
+                Logger.d { "No cached trending data available while offline" }
+                emit(
+                    PaginatedRepos(
+                        repos = emptyList(),
+                        hasMore = false,
+                        nextPageIndex = 2,
+                        isOffline = true
+                    )
+                )
                 return@flow
             } else {
                 Logger.d { "No cached data available, falling back to live API" }

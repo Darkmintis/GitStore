@@ -6,8 +6,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,8 +51,15 @@ class AppsViewModel(
 
     private var hasLoadedInitialData = false
     private val activeUpdates = mutableMapOf<String, Job>()
+    private val updateOutcomes = mutableMapOf<String, Boolean>()
     private var updateAllJob: Job? = null
     private var isBatchUpdating = false
+
+    /**
+     * Outlives the ViewModel so cleanup that must happen after [onCleared] (when
+     * viewModelScope is already cancelled) can still run.
+     */
+    private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _state = MutableStateFlow(AppsState())
     val state = _state
@@ -349,19 +359,30 @@ class AppsViewModel(
                 installer.install(filePath, ext)
 
                 updateAppState(app.packageName, UpdateState.Success)
-                delay(2000)
-                updateAppState(app.packageName, UpdateState.Idle)
+                updateOutcomes[app.packageName] = true
+
+                // During a batch the caller reads this outcome after join(); resetting to Idle
+                // here would race with that read, so only auto-reset single updates.
+                if (!isBatchUpdating) {
+                    delay(2000)
+                    updateAppState(app.packageName, UpdateState.Idle)
+                    updateOutcomes.remove(app.packageName)
+                }
 
                 Logger.d { "Successfully updated ${app.appName} to ${latestVersion}" }
 
             } catch (e: CancellationException) {
                 Logger.d { "Update cancelled for ${app.packageName}" }
-                cleanupUpdate(app.packageName, app.latestAssetName)
+                updateOutcomes[app.packageName] = false
+                withContext(NonCancellable) {
+                    cleanupUpdate(app.packageName, app.latestAssetName)
+                }
                 updateAppState(app.packageName, UpdateState.Idle)
                 throw e
             } catch (e: Exception) {
                 Logger.e { "Update failed for ${app.packageName}: ${e.message}" }
                 e.printStackTrace()
+                updateOutcomes[app.packageName] = false
                 cleanupUpdate(app.packageName, app.latestAssetName)
                 updateAppState(
                     app.packageName,
@@ -417,8 +438,6 @@ class AppsViewModel(
                         return@launch
                     }
 
-                    val previousStates = appsToUpdate.map { it.installedApp.packageName to it.updateState }.toMap()
-
                     _state.update {
                         it.copy(
                             updateAllProgress = UpdateAllProgress(
@@ -436,13 +455,14 @@ class AppsViewModel(
                     updateSingleApp(appItem.installedApp)
                     activeUpdates[appItem.installedApp.packageName]?.join()
 
-                    val currentItem = _state.value.apps.find {
-                        it.installedApp.packageName == appItem.installedApp.packageName
-                    }
-                    if (currentItem?.updateState is UpdateState.Success) {
-                        succeeded++
-                    } else if (currentItem?.updateState is UpdateState.Error) {
-                        failed++
+                    // Read the recorded outcome rather than the UI state: the update job may
+                    // already have reset itself to Idle (or still be showing Success).
+                    when (updateOutcomes.remove(appItem.installedApp.packageName)) {
+                        true -> succeeded++
+                        false -> failed++
+                        null -> Logger.w {
+                            "No update outcome recorded for ${appItem.installedApp.packageName}"
+                        }
                     }
 
                     _state.update {
@@ -475,8 +495,18 @@ class AppsViewModel(
                 _events.send(AppsEvent.ShowError(ErrorMapper.message(e, stringProvider)))
             } finally {
                 isBatchUpdating = false
-                _state.update {
-                    it.copy(
+                updateOutcomes.clear()
+                _state.update { currentState ->
+                    currentState.copy(
+                        // Success states are only kept alive during the batch so the loop can
+                        // observe them; reset afterwards so a future update is not filtered out.
+                        apps = currentState.apps.map { item ->
+                            if (item.updateState is UpdateState.Success) {
+                                item.copy(updateState = UpdateState.Idle)
+                            } else {
+                                item
+                            }
+                        },
                         isUpdatingAll = false,
                         updateAllProgress = null
                     )
@@ -605,14 +635,15 @@ class AppsViewModel(
         updateAllJob?.cancel()
         activeUpdates.values.forEach { it.cancel() }
 
-        viewModelScope.launch {
-            _state.value.apps.forEach { appItem ->
-                if (appItem.updateState != UpdateState.Idle &&
-                    appItem.updateState != UpdateState.Success
-                ) {
-                    appItem.installedApp.latestAssetName?.let { assetName ->
-                        downloader.cancelDownload(assetName)
-                    }
+        // viewModelScope is already cancelled here, so cleanup has to run on its own scope.
+        val pendingAssetNames = _state.value.apps
+            .filter { it.updateState != UpdateState.Idle && it.updateState != UpdateState.Success }
+            .mapNotNull { it.installedApp.latestAssetName }
+
+        if (pendingAssetNames.isNotEmpty()) {
+            cleanupScope.launch {
+                pendingAssetNames.forEach { assetName ->
+                    runCatching { downloader.cancelDownload(assetName) }
                 }
             }
         }

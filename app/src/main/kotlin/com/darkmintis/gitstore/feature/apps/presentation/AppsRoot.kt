@@ -63,7 +63,7 @@ import coil3.compose.AsyncImage
 import com.darkmintis.gitstore.core.presentation.components.EmptyState
 import com.darkmintis.gitstore.core.presentation.components.GithubStoreTopBarTitle
 import com.darkmintis.gitstore.core.presentation.components.LoadingState
-import com.darkmintis.gitstore.core.presentation.components.RetryErrorState
+import com.darkmintis.gitstore.core.presentation.components.OfflineAwareErrorState
 
 
 
@@ -239,7 +239,7 @@ fun AppsScreen(
                 }
 
                 state.errorMessage != null && state.apps.isEmpty() -> {
-                    RetryErrorState(
+                    OfflineAwareErrorState(
                         title = stringResource(R.string.error_load_apps),
                         message = state.errorMessage,
                         onRetry = { onAction(AppsAction.OnRetry) }

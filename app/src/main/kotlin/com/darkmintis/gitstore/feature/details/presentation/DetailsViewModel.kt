@@ -8,7 +8,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -57,6 +60,12 @@ class DetailsViewModel(
     private var hasLoadedInitialData = false
     private var currentDownloadJob: Job? = null
     private var currentAssetName: String? = null
+
+    /**
+     * Outlives the ViewModel so download cleanup can still run after [onCleared], when
+     * viewModelScope is already cancelled.
+     */
+    private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _state = MutableStateFlow(DetailsState())
     val state = _state
@@ -544,10 +553,6 @@ class DetailsViewModel(
             is DetailsAction.OpenDeveloperProfile -> {
                 // Handled in composable
             }
-
-            is DetailsAction.OnMessage -> {
-                // Handled in composable
-            }
         }
     }
 
@@ -838,8 +843,8 @@ class DetailsViewModel(
         currentDownloadJob?.cancel()
 
         currentAssetName?.let { assetName ->
-            viewModelScope.launch {
-                downloader.cancelDownload(assetName)
+            cleanupScope.launch {
+                runCatching { downloader.cancelDownload(assetName) }
             }
         }
     }

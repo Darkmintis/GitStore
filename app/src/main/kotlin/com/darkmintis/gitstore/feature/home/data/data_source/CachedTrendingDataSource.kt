@@ -9,15 +9,58 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.isSuccess
+import java.io.File
+import java.io.IOException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.PortUnreachableException
+import java.net.UnknownHostException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlin.time.Duration.Companion.hours
 import com.darkmintis.gitstore.core.domain.model.GithubRepoSummary
 import com.darkmintis.gitstore.core.domain.model.GithubUser
 
-class CachedTrendingDataSource() {
+/**
+ * On-disk name for the offline copy of the trending list. Lives in the app's cacheDir so the
+ * OS can reclaim it under storage pressure without losing any authoritative data.
+ */
+const val TRENDING_CACHE_FILE_NAME = "trending_apps.json"
+
+/**
+ * The seed list is regenerated daily, so a snapshot older than this is no longer a meaningful
+ * fallback. Serving it would present stale content as if it were current.
+ */
+private val MAX_CACHE_AGE = 48.hours
+
+/**
+ * A saved snapshot is only useful while it is recent enough to still reflect the daily list.
+ * Missing, blank, or malformed timestamps are treated as stale rather than trusted.
+ */
+internal fun isSnapshotFresh(
+    lastUpdated: String,
+    now: Instant = Clock.System.now()
+): Boolean {
+    val updated = runCatching { Instant.parse(lastUpdated) }.getOrNull() ?: return false
+    return (now - updated) <= MAX_CACHE_AGE
+}
+
+/**
+ * Serves the daily discovered trending list from jsDelivr and keeps a disk copy so the
+ * Trending tab still renders when the device is offline.
+ *
+ * Network is tried first so users always see today's list; the disk copy is only used as a
+ * fallback. That keeps it simple and guarantees freshness while still avoiding a dead screen.
+ */
+class CachedTrendingDataSource(
+    private val cacheFile: File,
+) {
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -39,63 +82,125 @@ class CachedTrendingDataSource() {
         expectSuccess = false
     }
 
-    private val baseUrl = "https://raw.githubusercontent.com/Darkmintis/Git-Store/main/cached-data/trending"
-
     /**
-     * Fetch cached trending repositories for the current platform
-     * Returns null if fetch fails or data is unavailable
+     * jsDelivr, not raw.githubusercontent.com: edge-cached across multiple CDNs with proper
+     * cache headers, so the Trending seed list loads fast everywhere instead of depending on
+     * GitHub's plain file server.
+     *
+     * `@main` is deliberate — jsDelivr revalidates branch refs within minutes, so the daily
+     * run of scripts/discover.py propagates to users automatically. Never pin this to a tag
+     * or SHA: those are cached immutably for a year and would freeze users on day-one data.
      */
-    suspend fun getCachedTrendingRepos(): CachedRepoResponse? {
-        return withContext(Dispatchers.IO) {
-            try {
-                // Using apps.json for all Android apps (platform-agnostic naming)
-                val url = "$baseUrl/apps.json"
+    private val baseUrl =
+        "https://cdn.jsdelivr.net/gh/Darkmintis/Git-Store@main/cached-data/trending"
 
-                Logger.d { "🔍 Fetching cached trending repos from: $url" }
+    suspend fun loadTrending(): TrendingResult = withContext(Dispatchers.IO) {
+        val fetched = fetchFromNetwork()
 
-                val response: HttpResponse = httpClient.get(url)
+        if (fetched != null && fetched.repos.isNotEmpty()) {
+            Logger.d { "✓ Loaded ${fetched.repos.size} trending repos from jsDelivr (updated ${fetched.lastUpdated})" }
+            writeCache(fetched)
+            return@withContext fetched
+        }
 
-                Logger.d { "📥 Response status: ${response.status.value} ${response.status.description}" }
+        val cached = readCache()
+        if (cached != null) {
+            Logger.d { "↩ Serving ${cached.repos.size} trending repos from disk cache (updated ${cached.lastUpdated})" }
+            return@withContext cached
+        }
 
-                when {
-                    response.status.isSuccess() -> {
-                        val responseText = response.bodyAsText()
-                        Logger.d { "📄 Response body length: ${responseText.length} characters" }
-
-                        val cachedData = json.decodeFromString<CachedRepoResponse>(responseText)
-
-                        Logger.d { "✓ Successfully loaded ${cachedData.repositories.size} cached repos" }
-                        Logger.d { "✓ Last updated: ${cachedData.lastUpdated}" }
-
-                        cachedData
-                    }
-                    response.status.value == 404 -> {
-                        Logger.w { "⚠️ Cached data not found (404) - may not be generated yet" }
-                        Logger.w { "⚠️ URL attempted: $url" }
-                        null
-                    }
-                    else -> {
-                        val errorBody = response.bodyAsText()
-                        Logger.e { "❌ Failed to fetch cached repos: HTTP ${response.status.value}" }
-                        Logger.e { "❌ Response body: ${errorBody.take(500)}" }
-                        null
-                    }
-                }
-            } catch (e: HttpRequestTimeoutException) {
-                Logger.e { "⏱️ Timeout fetching cached trending repos: ${e.message}" }
-                e.printStackTrace()
-                null
-            } catch (e: SerializationException) {
-                Logger.e { "🔧 JSON parsing error: ${e.message}" }
-                e.printStackTrace()
-                null
-            } catch (e: Exception) {
-                Logger.e { "💥 Error fetching cached trending repos: ${e.message}" }
-                Logger.e { "💥 Exception type: ${e::class.simpleName}" }
-                e.printStackTrace()
-                null
+        Logger.d {
+            if (fetched?.isOffline == true) {
+                "No trending cache available and the device appears to be offline"
+            } else {
+                "No trending data available"
             }
         }
+
+        TrendingResult(isOffline = fetched?.isOffline == true)
+    }
+
+    private suspend fun fetchFromNetwork(): TrendingResult? {
+        val url = "$baseUrl/apps.json"
+
+        return try {
+            val response: HttpResponse = httpClient.get(url)
+
+            if (response.status.isSuccess()) {
+                val responseText = response.bodyAsText()
+                val cachedData = json.decodeFromString<CachedRepoResponse>(responseText)
+
+                if (cachedData.repositories.isEmpty()) {
+                    null
+                } else {
+                    TrendingResult(
+                        repos = cachedData.repositories,
+                        lastUpdated = cachedData.lastUpdated
+                    )
+                }
+            } else if (response.status.value == 404) {
+                Logger.w { "⚠️ Cached trending data not found (404) - may not be generated yet" }
+                null
+            } else {
+                Logger.e { "❌ Failed to fetch trending repos: HTTP ${response.status.value}" }
+                null
+            }
+        } catch (e: HttpRequestTimeoutException) {
+            // Must stay above IOException: HttpRequestTimeoutException extends it.
+            Logger.e { "⏱️ Timeout fetching trending repos: ${e.message}" }
+            null
+        } catch (e: SerializationException) {
+            Logger.e { "🔧 Trending JSON parsing error: ${e.message}" }
+            null
+        } catch (e: IOException) {
+            Logger.e { "📡 Trending fetch failed (${e::class.simpleName}): ${e.message}" }
+            TrendingResult(isOffline = isOfflineCause(e))
+        } catch (e: Exception) {
+            Logger.e { "💥 Error fetching trending repos: ${e::class.simpleName}: ${e.message}" }
+            null
+        }
+    }
+
+    private fun readCache(): TrendingResult? {
+        val text = runCatching {
+            if (cacheFile.exists()) cacheFile.readText() else null
+        }.getOrNull() ?: return null
+
+        val cached = runCatching {
+            json.decodeFromString<CachedRepoResponse>(text)
+        }.getOrNull()
+            ?.takeIf { it.repositories.isNotEmpty() }
+            ?: return null
+
+        if (!isSnapshotFresh(cached.lastUpdated)) {
+            Logger.d {
+                "Discarding stale trending cache (last updated ${
+                    cached.lastUpdated.ifBlank { "unknown" }
+                })"
+            }
+            return null
+        }
+
+        return TrendingResult(
+            repos = cached.repositories,
+            lastUpdated = cached.lastUpdated,
+            isFromDiskCache = true
+        )
+    }
+
+    private fun writeCache(result: TrendingResult) {
+        runCatching {
+            val payload = CachedRepoResponse(
+                // Stamp the write time when the payload itself has no usable timestamp so the
+                // entry is not immediately considered stale on the next launch.
+                lastUpdated = result.lastUpdated?.takeIf { it.isNotBlank() }
+                    ?: Clock.System.now().toString(),
+                totalCount = result.repos.size,
+                repositories = result.repos
+            )
+            cacheFile.parentFile?.mkdirs()
+            cacheFile.writeText(json.encodeToString(payload))
+        }.onFailure { Logger.w { "Could not persist trending cache: ${it.message}" } }
     }
 
     /**
@@ -104,6 +209,42 @@ class CachedTrendingDataSource() {
     fun close() {
         httpClient.close()
     }
+}
+
+/**
+ * Outcome of loading the trending seed list. `isOffline` distinguishes "no connection" from
+ * "the file is missing or malformed" so the UI can show the right message.
+ */
+data class TrendingResult(
+    val repos: List<CachedGithubRepoSummary> = emptyList(),
+    val lastUpdated: String? = null,
+    val isOffline: Boolean = false,
+    val isFromDiskCache: Boolean = false,
+) {
+    val hasData: Boolean get() = repos.isNotEmpty()
+}
+
+/**
+ * Only treat failures that genuinely mean "nothing is reachable" as offline. A plain
+ * IOException can also be a slow-but-alive server, where an offline message would be wrong.
+ */
+private fun isOfflineCause(error: Throwable): Boolean {
+    var current: Throwable? = error
+    var depth = 0
+
+    while (current != null && depth < 5) {
+        if (current is UnknownHostException ||
+            current is ConnectException ||
+            current is NoRouteToHostException ||
+            current is PortUnreachableException
+        ) {
+            return true
+        }
+        current = current.cause
+        depth++
+    }
+
+    return false
 }
 
 /**

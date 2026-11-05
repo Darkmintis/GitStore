@@ -66,7 +66,13 @@ class AndroidDownloader(
             while (!isDone && currentCoroutineContext().isActive) {
                 val cursor =
                     downloadManager.query(DownloadManager.Query().setFilterById(downloadId))
-                if (cursor.moveToFirst()) {
+
+                // The cursor must be closed on every path, including the throws below.
+                try {
+                    if (!cursor.moveToFirst()) {
+                        throw IllegalStateException("Download ID not found: $downloadId")
+                    }
+
                     val status =
                         cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
                     val downloaded =
@@ -77,9 +83,13 @@ class AndroidDownloader(
 
                     when (status) {
                         DownloadManager.STATUS_SUCCESSFUL -> {
-                            val localUriStr =
-                                cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
-                            val finalPath = Uri.parse(localUriStr).path
+                            // COLUMN_LOCAL_URI is nullable; Uri.parse(null) would NPE downstream.
+                            val localUriStr = cursor.getString(
+                                cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI)
+                            )
+                            val finalPath = localUriStr
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { Uri.parse(it).path }
                                 ?: throw IllegalStateException("Invalid local URI: $localUriStr")
 
                             val file = File(finalPath)
@@ -114,10 +124,9 @@ class AndroidDownloader(
                             )
                         )
                     }
-                } else {
-                    throw IllegalStateException("Download ID not found: $downloadId")
+                } finally {
+                    cursor.close()
                 }
-                cursor.close()
 
                 if (!isDone) delay(500L)
             }

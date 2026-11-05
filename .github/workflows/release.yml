@@ -28,7 +28,23 @@ jobs:
         
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
-      
+
+    - name: Resolve version from tag
+      id: version
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        VERSION="${GITHUB_REF_NAME#v}"
+        IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+        # Strip any pre-release suffix and default missing parts to 0.
+        MAJOR=${MAJOR%%[!0-9]*}; MAJOR=${MAJOR:-0}
+        MINOR=${MINOR%%[!0-9]*}; MINOR=${MINOR:-0}
+        PATCH=${PATCH%%[!0-9]*}; PATCH=${PATCH:-0}
+        # Keep versionCode monotonic: 1.4.1 -> 10401
+        CODE=$((10#$MAJOR * 10000 + 10#$MINOR * 100 + 10#$PATCH))
+        echo "name=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "code=$CODE" >> "$GITHUB_OUTPUT"
+        echo "Building $VERSION (versionCode $CODE)"
+
     - name: Decode and prepare keystore
       run: |
         echo "${{ secrets.KEYSTORE_FILE }}" | base64 -d > $GITHUB_WORKSPACE/gitstore-release.keystore
@@ -37,6 +53,8 @@ jobs:
     - name: Build Release APK
       run: ./gradlew assembleRelease --no-daemon --stacktrace
       env:
+        APP_VERSION_NAME: ${{ steps.version.outputs.name }}
+        APP_VERSION_CODE: ${{ steps.version.outputs.code }}
         KEYSTORE_FILE: ${{ env.KEYSTORE_PATH }}
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}

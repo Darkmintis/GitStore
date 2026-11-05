@@ -22,10 +22,12 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -36,14 +38,17 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,11 +77,15 @@ import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 import com.darkmintis.gitstore.app.navigation.LocalBottomNavigationLiquid
 import com.darkmintis.gitstore.core.presentation.components.GithubStoreButton
+import com.darkmintis.gitstore.core.presentation.components.OfflineAwareErrorState
 import com.darkmintis.gitstore.core.presentation.components.RepositoryCard
-import com.darkmintis.gitstore.core.presentation.components.RetryErrorState
 import com.darkmintis.gitstore.core.presentation.theme.GithubStoreTheme
+import com.darkmintis.gitstore.core.presentation.utils.ConnectivityObserver
+import com.darkmintis.gitstore.core.presentation.utils.formatUpdatedAt
 import com.darkmintis.gitstore.feature.home.presentation.components.HomeFilterChips
 import com.darkmintis.gitstore.feature.home.presentation.model.HomeCategory
+import kotlinx.datetime.Instant as DateInstant
+import org.koin.compose.koinInject
 
 @Composable
 fun HomeRoot(
@@ -129,6 +138,8 @@ fun HomeScreen(
 ) {
     val listState = rememberLazyStaggeredGridState()
     val liquidState = LocalBottomNavigationLiquid.current
+    val connectivityObserver: ConnectivityObserver = koinInject()
+    val isOnline by connectivityObserver.isOnline.collectAsStateWithLifecycle(initialValue = true)
 
     val shouldLoadMore by remember {
         derivedStateOf {
@@ -153,6 +164,21 @@ fun HomeScreen(
         }
     }
 
+    // Refresh saved/cached trending once when connectivity returns.
+    var sawOfflineWhileCached by remember { mutableStateOf(false) }
+    LaunchedEffect(isOnline, state.isShowingCachedData) {
+        if (state.isShowingCachedData) {
+            if (!isOnline) {
+                sawOfflineWhileCached = true
+            } else if (sawOfflineWhileCached) {
+                sawOfflineWhileCached = false
+                currentOnAction(HomeAction.Refresh)
+            }
+        } else {
+            sawOfflineWhileCached = false
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(state, onAction)
@@ -167,6 +193,16 @@ fun HomeScreen(
                 .liquefiable(liquidState)
         ) {
             FilterChips(state, onAction)
+
+            if (state.isShowingCachedData && state.repos.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                CachedDataNotice(
+                    savedAt = state.cachedUpdatedAt,
+                    onRetry = { onAction(HomeAction.Refresh) },
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+            }
 
             Box(Modifier.fillMaxSize()) {
                 LoadingState(state)
@@ -267,6 +303,67 @@ private fun MainState(
     }
 }
 
+/**
+ * Shown when the visible list came from disk. Browsing still works, but installs need a
+ * connection, so the notice says exactly that, shows how old the snapshot is, and offers a
+ * retry instead of silently pretending all is well.
+ */
+@Composable
+private fun CachedDataNotice(
+    savedAt: String?,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val savedLabel = savedAt?.let { iso ->
+        if (runCatching { DateInstant.parse(iso) }.isSuccess) formatUpdatedAt(iso) else null
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.tertiaryContainer)
+            .padding(start = 12.dp, top = 8.dp, end = 4.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.WifiOff,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onTertiaryContainer
+        )
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 8.dp, end = 4.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.showing_cached_trending),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+
+            if (savedLabel != null) {
+                Text(
+                    text = savedLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.72f),
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+
+        TextButton(onClick = onRetry) {
+            Text(
+                text = stringResource(R.string.retry),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LoadingState(state: HomeState) {
@@ -296,7 +393,7 @@ private fun ErrorState(
     onAction: (HomeAction) -> Unit
 ) {
     if (state.errorMessage != null && state.repos.isEmpty()) {
-        RetryErrorState(
+        OfflineAwareErrorState(
             title = stringResource(R.string.home_failed_to_load_repositories),
             message = state.errorMessage,
             onRetry = { onAction(HomeAction.Retry) },

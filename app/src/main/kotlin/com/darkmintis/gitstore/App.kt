@@ -3,7 +3,10 @@ package com.darkmintis.gitstore
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.Composable
@@ -65,15 +68,17 @@ fun App(
     }
 
     val context = LocalContext.current
-    val localizedContext = remember(context, currentLocale) {
-        val config = Configuration(context.resources.configuration)
+    val configuration = LocalConfiguration.current
+
+    val localizedContext = remember(context, configuration, currentLocale) {
+        val config = Configuration(configuration)
         config.setLocale(currentLocale)
         config.setLayoutDirection(currentLocale)
         context.createConfigurationContext(config)
     }
 
-    val localizedConfiguration = remember(context, currentLocale) {
-        Configuration(context.resources.configuration).apply {
+    val localizedConfiguration = remember(configuration, currentLocale) {
+        Configuration(configuration).apply {
             setLocale(currentLocale)
             setLayoutDirection(currentLocale)
         }
@@ -116,7 +121,18 @@ fun App(
         Column(modifier = Modifier.fillMaxSize()) {
             OfflineBanner(isOffline = !isOnline)
 
-            Box(modifier = Modifier.weight(1f)) {
+            // When the banner owns the status-bar inset, stop TopAppBars from padding it again.
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .then(
+                        if (!isOnline) {
+                            Modifier.consumeWindowInsets(WindowInsets.statusBars)
+                        } else {
+                            Modifier
+                        }
+                    )
+            ) {
                 if (state.showRateLimitDialog && state.rateLimitInfo != null) {
                     RateLimitDialog(
                         rateLimitInfo = state.rateLimitInfo,
