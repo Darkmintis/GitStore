@@ -2,11 +2,14 @@ package com.darkmintis.gitstore.core.domain.use_cases
 
 import com.darkmintis.gitstore.testing.FakeInstalledAppsRepository
 import com.darkmintis.gitstore.testing.FakePackageMonitor
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SyncInstalledAppsUseCaseTest {
 
     @Test
@@ -15,7 +18,7 @@ class SyncInstalledAppsUseCaseTest {
         val remove = FakeInstalledAppsRepository.sampleApp(packageName = "com.remove", repoId = 2)
         val repo = FakeInstalledAppsRepository(listOf(keep, remove))
         val monitor = FakePackageMonitor(installedPackages = setOf("com.keep"))
-        val useCase = SyncInstalledAppsUseCase(monitor, repo)
+        val useCase = SyncInstalledAppsUseCase(monitor, repo, UnconfinedTestDispatcher(testScheduler))
 
         val result = useCase()
 
@@ -41,7 +44,7 @@ class SyncInstalledAppsUseCaseTest {
                 )
             )
         )
-        val useCase = SyncInstalledAppsUseCase(monitor, repo)
+        val useCase = SyncInstalledAppsUseCase(monitor, repo, UnconfinedTestDispatcher(testScheduler))
 
         val result = useCase()
 
