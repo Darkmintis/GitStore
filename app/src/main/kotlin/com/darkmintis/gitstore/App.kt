@@ -90,6 +90,10 @@ fun App(
         mutableStateListOf(GithubStoreGraph.HomeScreen)
     }
 
+    val resolvedDarkTheme = state.isDarkTheme ?: isSystemInDarkTheme()
+    // Apply before locale LocalContext override — status bars need the real Activity.
+    ApplyAndroidSystemBars(resolvedDarkTheme)
+
     CompositionLocalProvider(
         LocalContext provides localizedContext,
         LocalConfiguration provides localizedConfiguration
@@ -97,10 +101,8 @@ fun App(
         GithubStoreTheme(
             appTheme = state.currentColorTheme,
             isAmoledTheme = state.isAmoledTheme,
-            isDarkTheme = state.isDarkTheme ?: isSystemInDarkTheme()
+            isDarkTheme = resolvedDarkTheme
         ) {
-        ApplyAndroidSystemBars(state.isDarkTheme)
-
         LaunchedEffect(state.isCheckingAuth) {
             if (!state.isCheckingAuth) {
                 onAuthenticationChecked()
