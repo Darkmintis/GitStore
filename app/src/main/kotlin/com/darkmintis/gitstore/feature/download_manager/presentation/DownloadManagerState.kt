@@ -12,7 +12,11 @@ data class DownloadItem(
     val fileSize: Long,
     val status: DownloadStatus,
     val progress: Int? = null,
-)
+    val repoId: Long? = null,
+    val displayName: String? = null,
+) {
+    val title: String get() = displayName?.takeIf { it.isNotBlank() } ?: fileName
+}
 
 enum class DownloadStatus {
     DOWNLOADING,
