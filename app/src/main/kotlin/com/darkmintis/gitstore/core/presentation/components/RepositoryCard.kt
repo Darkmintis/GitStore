@@ -21,7 +21,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Update
+import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularWavyProgressIndicator
@@ -333,9 +333,9 @@ fun InstallStatusBadge(
     }
 
     val icon = if (isUpdateAvailable) {
-        Icons.Default.Update
+        Icons.Filled.Upgrade
     } else {
-        Icons.Default.CheckCircle
+        Icons.Filled.CheckCircle
     }
 
     val text = if (isUpdateAvailable) {

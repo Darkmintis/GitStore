@@ -18,8 +18,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Update
+import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -76,6 +77,7 @@ fun SmartInstallButton(
     val installedApp = state.installedApp
     val isInstalled = installedApp != null
     val isUpdateAvailable = installedApp?.isUpdateAvailable == true
+    val hasDownloadedApk = state.hasDownloadedApk
 
     val enabled = remember(primaryAsset, isDownloading, isInstalling) {
         primaryAsset != null && !isDownloading && !isInstalling
@@ -87,7 +89,7 @@ fun SmartInstallButton(
     val buttonColor = when {
         !enabled && !isActiveDownload -> MaterialTheme.colorScheme.surfaceContainer
         isUpdateAvailable -> MaterialTheme.colorScheme.tertiary
-        isInstalled -> MaterialTheme.colorScheme.secondary
+        isInstalled || hasDownloadedApk -> MaterialTheme.colorScheme.secondary
         else -> MaterialTheme.colorScheme.primary
     }
 
@@ -103,6 +105,7 @@ fun SmartInstallButton(
         )
 
         isInstalled -> stringResource(R.string.reinstall)
+        hasDownloadedApk -> stringResource(R.string.install_downloaded)
         else -> stringResource(R.string.install_latest)
     }
 
@@ -203,19 +206,30 @@ fun SmartInstallButton(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            if (isUpdateAvailable) {
-                                Icon(
-                                    imageVector = Icons.Default.Update,
+                            when {
+                                isUpdateAvailable -> Icon(
+                                    imageVector = Icons.Filled.Upgrade,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.onTertiary
                                 )
-                            } else if (isInstalled) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
+
+                                isInstalled -> Icon(
+                                    imageVector = Icons.Filled.CheckCircle,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.onSecondary
+                                )
+
+                                else -> Icon(
+                                    imageVector = Icons.Filled.Download,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = if (hasDownloadedApk) {
+                                        MaterialTheme.colorScheme.onSecondary
+                                    } else {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    }
                                 )
                             }
 
@@ -224,7 +238,7 @@ fun SmartInstallButton(
                                 color = if (enabled) {
                                     when {
                                         isUpdateAvailable -> MaterialTheme.colorScheme.onTertiary
-                                        isInstalled -> MaterialTheme.colorScheme.onSecondary
+                                        isInstalled || hasDownloadedApk -> MaterialTheme.colorScheme.onSecondary
                                         else -> MaterialTheme.colorScheme.onPrimary
                                     }
                                 } else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
@@ -251,7 +265,7 @@ fun SmartInstallButton(
                                                 alpha = 0.8f
                                             )
 
-                                            isInstalled -> MaterialTheme.colorScheme.onSecondary.copy(
+                                            isInstalled || hasDownloadedApk -> MaterialTheme.colorScheme.onSecondary.copy(
                                                 alpha = 0.8f
                                             )
 
@@ -279,7 +293,7 @@ fun SmartInstallButton(
                                                     alpha = 0.8f
                                                 )
 
-                                                isInstalled -> MaterialTheme.colorScheme.onSecondary.copy(
+                                                isInstalled || hasDownloadedApk -> MaterialTheme.colorScheme.onSecondary.copy(
                                                     alpha = 0.8f
                                                 )
 
@@ -348,7 +362,7 @@ fun SmartInstallButton(
                     tint = if (enabled) {
                         when {
                             isUpdateAvailable -> MaterialTheme.colorScheme.onTertiary
-                            isInstalled -> MaterialTheme.colorScheme.onSecondary
+                            isInstalled || hasDownloadedApk -> MaterialTheme.colorScheme.onSecondary
                             else -> MaterialTheme.colorScheme.onPrimary
                         }
                     } else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)

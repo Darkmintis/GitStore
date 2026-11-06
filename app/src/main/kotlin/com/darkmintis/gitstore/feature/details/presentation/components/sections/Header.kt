@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Update
+import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -97,7 +97,7 @@ fun LazyListScope.header(
                     },
                     leadingIcon = {
                         Icon(
-                            imageVector = Icons.Default.Update,
+                            imageVector = Icons.Filled.Upgrade,
                             contentDescription = null,
                             modifier = Modifier.size(24.dp)
                         )

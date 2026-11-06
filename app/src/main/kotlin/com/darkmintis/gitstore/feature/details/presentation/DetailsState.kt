@@ -52,6 +52,8 @@ data class DetailsState(
     val isAppManagerEnabled: Boolean = false,
 
     val installedApp: InstalledApp? = null,
+    /** Primary (or matching) APK already on disk under Downloads. */
+    val hasDownloadedApk: Boolean = false,
     val isFavourite: Boolean = false,
     val isStarred: Boolean = false,
 )
