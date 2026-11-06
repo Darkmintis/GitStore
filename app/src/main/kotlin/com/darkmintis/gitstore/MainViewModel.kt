@@ -51,31 +51,34 @@ class MainViewModel(
         }
 
         viewModelScope.launch {
-            themesRepository
-                .getThemeColor()
-                .collect { theme ->
-                    _state.update {
-                        it.copy(currentColorTheme = theme)
-                    }
+            // Seed theme before first compose frame; keep splash up until then.
+            val theme = themesRepository.getThemeColor().first()
+            val amoled = themesRepository.getAmoledTheme().first()
+            val isDark = themesRepository.getIsDarkTheme().first()
+            _state.update {
+                it.copy(
+                    currentColorTheme = theme,
+                    isAmoledTheme = amoled,
+                    isDarkTheme = isDark,
+                    isThemeReady = true,
+                )
+            }
+
+            launch {
+                themesRepository.getThemeColor().collect { color ->
+                    _state.update { it.copy(currentColorTheme = color) }
                 }
-        }
-        viewModelScope.launch {
-            themesRepository
-                .getAmoledTheme()
-                .collect { isAmoled ->
-                    _state.update {
-                        it.copy(isAmoledTheme = isAmoled)
-                    }
+            }
+            launch {
+                themesRepository.getAmoledTheme().collect { isAmoled ->
+                    _state.update { it.copy(isAmoledTheme = isAmoled) }
                 }
-        }
-        viewModelScope.launch {
-            themesRepository
-                .getIsDarkTheme()
-                .collect { isDarkTheme ->
-                    _state.update {
-                        it.copy(isDarkTheme = isDarkTheme)
-                    }
+            }
+            launch {
+                themesRepository.getIsDarkTheme().collect { isDarkTheme ->
+                    _state.update { it.copy(isDarkTheme = isDarkTheme) }
                 }
+            }
         }
 
         viewModelScope.launch(Dispatchers.IO) {
