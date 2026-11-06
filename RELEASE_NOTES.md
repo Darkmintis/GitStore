@@ -9,6 +9,9 @@
 - Trending fetch errors no longer fall through to the live GitHub API more than necessary
 - Reduced logging noise on the trending fetch path
 - All seven UI locales include the new saved-results notice
+- Offline screens across Home, Search, Installed Apps and Developer Profile now share one clear WiFi empty state
+- The app retries automatically when the connection comes back, instead of requiring a manual refresh
+- New and Popular no longer show a misleading "no repositories" message while offline
 
 ### Bug Fixes
 - Fixed a lost trailing space in the German "More Apps by Darkmintis" label that could join two words together
@@ -17,6 +20,7 @@
 - Downloads are now cleaned up when you leave the screen instead of leaving partial APKs behind
 - Fixed a rare crash when a finished download reported no local file path
 - The in-app updater no longer offers the version you are already running
+- The offline banner no longer overlaps the status bar or double-pads top app bars
 
 ### Under the Hood
 - Trending seed list now resolves through `CachedTrendingDataSource.loadTrending()`, returning a typed result that distinguishes offline from missing data
