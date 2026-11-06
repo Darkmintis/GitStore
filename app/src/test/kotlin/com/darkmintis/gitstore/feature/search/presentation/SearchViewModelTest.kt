@@ -2,19 +2,16 @@ package com.darkmintis.gitstore.feature.search.presentation
 
 import app.cash.turbine.test
 import com.darkmintis.gitstore.R
-import com.darkmintis.gitstore.core.domain.use_cases.SyncInstalledAppsUseCase
 import com.darkmintis.gitstore.feature.home.domain.model.PaginatedRepos
 import com.darkmintis.gitstore.feature.search.domain.model.SortBy
 import com.darkmintis.gitstore.testing.FakeFavouritesRepository
 import com.darkmintis.gitstore.testing.FakeInstalledAppsRepository
-import com.darkmintis.gitstore.testing.FakePackageMonitor
 import com.darkmintis.gitstore.testing.FakeSearchRepository
 import com.darkmintis.gitstore.testing.FakeStarredRepository
 import com.darkmintis.gitstore.testing.FakeStringProvider
 import com.darkmintis.gitstore.testing.MainDispatcherTest
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -33,10 +30,7 @@ class SearchViewModelTest : MainDispatcherTest() {
             ),
             searchRepository = searchRepository,
             installedAppsRepository = installed,
-            syncInstalledAppsUseCase = SyncInstalledAppsUseCase(
-                FakePackageMonitor(),
-                installed
-            ),
+            syncInstalledAppsUseCase = syncInstalledAppsUseCase(installedAppsRepository = installed),
             favouritesRepository = FakeFavouritesRepository(),
             starredRepository = FakeStarredRepository()
         )

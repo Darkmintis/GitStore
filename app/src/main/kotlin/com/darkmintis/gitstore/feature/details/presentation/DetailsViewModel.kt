@@ -8,10 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -38,6 +35,8 @@ import com.darkmintis.gitstore.core.presentation.utils.ErrorMapper
 import com.darkmintis.gitstore.core.presentation.utils.StringProvider
 import com.darkmintis.gitstore.core.data.services.Downloader
 import com.darkmintis.gitstore.core.data.services.Installer
+import com.darkmintis.gitstore.core.domain.model.GithubAsset
+import com.darkmintis.gitstore.core.domain.model.GithubRepoSummary
 import com.darkmintis.gitstore.core.domain.repository.StarredRepository
 import com.darkmintis.gitstore.core.domain.use_cases.SyncInstalledAppsUseCase
 import com.darkmintis.gitstore.feature.details.domain.repository.DetailsRepository
@@ -61,17 +60,12 @@ class DetailsViewModel(
     private var currentDownloadJob: Job? = null
     private var currentAssetName: String? = null
 
-    /**
-     * Outlives the ViewModel so download cleanup can still run after [onCleared], when
-     * viewModelScope is already cancelled.
-     */
-    private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     private val _state = MutableStateFlow(DetailsState())
     val state = _state
         .onStart {
             if (!hasLoadedInitialData) {
                 loadInitial()
+                observeInstalledApp()
                 hasLoadedInitialData = true
             }
         }
@@ -211,7 +205,7 @@ class DetailsViewModel(
                 val stats = statsDeferred.await()
                 val readme = readmeDeferred.await()
                 val userProfile = userProfileDeferred.await()
-                val installedApp = installedAppDeferred.await()
+                var installedApp = installedAppDeferred.await()
 
                 val installable = latestRelease?.assets?.filter { asset ->
                     installer.isAssetInstallable(asset.name)
@@ -219,10 +213,26 @@ class DetailsViewModel(
 
                 val primary = installer.choosePrimaryAsset(installable)
 
+                val localPath = primary?.let { downloader.getDownloadedFilePath(it.name) }
+                val hasDownloadedApk = localPath != null
+
+                // Recover DB row when the APK was installed outside Details (e.g. Downloads).
+                if (installedApp == null && localPath != null && primary != null) {
+                    installedApp = recoverInstalledFromLocalApk(
+                        repo = repo,
+                        asset = primary,
+                        releaseTag = latestRelease?.tagName.orEmpty(),
+                        filePath = localPath,
+                    )
+                }
+
                 val isObtainiumAvailable = installer.isObtainiumInstalled()
                 val isAppManagerAvailable = installer.isAppManagerInstalled()
 
-                Logger.d { "Loaded repo: ${repo.name}, installedApp: ${installedApp?.packageName}" }
+                Logger.d {
+                    "Loaded repo: ${repo.name}, installedApp: ${installedApp?.packageName}, " +
+                        "hasDownloadedApk: $hasDownloadedApk"
+                }
 
                 _state.value = _state.value.copy(
                     isLoading = false,
@@ -244,6 +254,7 @@ class DetailsViewModel(
                     isAppManagerAvailable = isAppManagerAvailable,
                     isAppManagerEnabled = isAppManagerEnabled,
                     installedApp = installedApp,
+                    hasDownloadedApk = hasDownloadedApk,
                 )
             } catch (t: CancellationException) {
                 throw t
@@ -314,7 +325,8 @@ class DetailsViewModel(
                 _state.value = _state.value.copy(
                     isDownloading = false,
                     downloadProgressPercent = null,
-                    downloadStage = DownloadStage.IDLE
+                    downloadStage = DownloadStage.IDLE,
+                    hasDownloadedApk = false,
                 )
             }
 
@@ -473,7 +485,12 @@ class DetailsViewModel(
                                 downloadStage = DownloadStage.DOWNLOADING
                             )
 
-                            downloader.download(primary.downloadUrl, primary.name).collect { p ->
+                            downloader.download(
+                                url = primary.downloadUrl,
+                                suggestedFileName = primary.name,
+                                repoId = repositoryId,
+                                displayName = notificationTitle(),
+                            ).collect { p ->
                                 _state.value =
                                     _state.value.copy(downloadProgressPercent = p.percent)
                                 if (p.percent == 100) {
@@ -586,23 +603,36 @@ class DetailsViewModel(
                     extOrMime = assetName.substringAfterLast('.', "").lowercase()
                 )
 
-                _state.value = _state.value.copy(downloadStage = DownloadStage.DOWNLOADING)
-                downloader.download(downloadUrl, assetName).collect { p ->
-                    _state.value = _state.value.copy(downloadProgressPercent = p.percent)
-                    if (p.percent == 100) {
-                        _state.value = _state.value.copy(downloadStage = DownloadStage.VERIFYING)
+                var filePath = downloader.getDownloadedFilePath(assetName)
+                if (filePath == null) {
+                    _state.value = _state.value.copy(downloadStage = DownloadStage.DOWNLOADING)
+                    downloader.download(
+                        url = downloadUrl,
+                        suggestedFileName = assetName,
+                        repoId = repositoryId,
+                        displayName = notificationTitle(),
+                    ).collect { p ->
+                        _state.value = _state.value.copy(downloadProgressPercent = p.percent)
+                        if (p.percent == 100) {
+                            _state.value = _state.value.copy(downloadStage = DownloadStage.VERIFYING)
+                        }
                     }
+
+                    filePath = downloader.getDownloadedFilePath(assetName)
+                        ?: throw IllegalStateException("Downloaded file not found")
+
+                    appendLog(
+                        assetName = assetName,
+                        size = sizeBytes,
+                        tag = releaseTag,
+                        result = LogResult.Downloaded
+                    )
+                } else {
+                    _state.value = _state.value.copy(
+                        hasDownloadedApk = true,
+                        downloadStage = DownloadStage.VERIFYING,
+                    )
                 }
-
-                val filePath = downloader.getDownloadedFilePath(assetName)
-                    ?: throw IllegalStateException("Downloaded file not found")
-
-                appendLog(
-                    assetName = assetName,
-                    size = sizeBytes,
-                    tag = releaseTag,
-                    result = LogResult.Downloaded
-                )
 
                 _state.value = _state.value.copy(downloadStage = DownloadStage.INSTALLING)
                 val ext = assetName.substringAfterLast('.', "").lowercase()
@@ -622,7 +652,10 @@ class DetailsViewModel(
 
                 installer.install(filePath, ext)
 
-                _state.value = _state.value.copy(downloadStage = DownloadStage.IDLE)
+                _state.value = _state.value.copy(
+                    downloadStage = DownloadStage.IDLE,
+                    hasDownloadedApk = true,
+                )
                 currentAssetName = null
                 appendLog(
                     assetName = assetName,
@@ -775,11 +808,19 @@ class DetailsViewModel(
                     downloadProgressPercent = null
                 )
 
-                downloader.download(downloadUrl, assetName).collect { p ->
+                downloader.download(
+                    url = downloadUrl,
+                    suggestedFileName = assetName,
+                    repoId = repositoryId,
+                    displayName = notificationTitle(),
+                ).collect { p ->
                     _state.value = _state.value.copy(downloadProgressPercent = p.percent)
                 }
 
-                _state.value = _state.value.copy(isDownloading = false)
+                _state.value = _state.value.copy(
+                    isDownloading = false,
+                    hasDownloadedApk = true,
+                )
                 currentAssetName = null
                 appendLog(
                     assetName = assetName,
@@ -803,6 +844,68 @@ class DetailsViewModel(
                     result = LogResult.Error(t.message)
                 )
             }
+        }
+    }
+
+    private fun observeInstalledApp() {
+        viewModelScope.launch {
+            installedAppsRepository.getAllInstalledApps().collect { apps ->
+                val match = apps.find { it.repoId == repositoryId }
+                _state.update { current ->
+                    if (current.installedApp == match) current
+                    else current.copy(installedApp = match)
+                }
+            }
+        }
+    }
+
+    private suspend fun recoverInstalledFromLocalApk(
+        repo: GithubRepoSummary,
+        asset: GithubAsset,
+        releaseTag: String,
+        filePath: String,
+    ): InstalledApp? {
+        return try {
+            val apkInfo = installer.getApkInfoExtractor().extractPackageInfo(filePath) ?: return null
+            if (!packageMonitor.isPackageInstalled(apkInfo.packageName)) return null
+
+            val installedApp = InstalledApp(
+                packageName = apkInfo.packageName,
+                repoId = repo.id,
+                repoName = repo.name,
+                repoOwner = repo.owner.login,
+                repoOwnerAvatarUrl = repo.owner.avatarUrl,
+                repoDescription = repo.description,
+                primaryLanguage = repo.language,
+                repoUrl = repo.htmlUrl,
+                installedVersion = releaseTag.ifBlank { apkInfo.versionName },
+                installedAssetName = asset.name,
+                installedAssetUrl = asset.downloadUrl,
+                latestVersion = releaseTag.ifBlank { apkInfo.versionName },
+                latestAssetName = asset.name,
+                latestAssetUrl = asset.downloadUrl,
+                latestAssetSize = asset.size,
+                appName = apkInfo.appName,
+                installSource = InstallSource.THIS_APP,
+                installedAt = DateClock.System.now().toEpochMilliseconds(),
+                lastCheckedAt = DateClock.System.now().toEpochMilliseconds(),
+                lastUpdatedAt = DateClock.System.now().toEpochMilliseconds(),
+                isUpdateAvailable = false,
+                updateCheckEnabled = true,
+                releaseNotes = "",
+                systemArchitecture = installer.detectSystemArchitecture().name,
+                fileExtension = asset.name.substringAfterLast('.', ""),
+                isPendingInstall = false,
+                installedVersionName = apkInfo.versionName,
+                installedVersionCode = apkInfo.versionCode,
+                latestVersionName = apkInfo.versionName,
+                latestVersionCode = apkInfo.versionCode,
+            )
+            installedAppsRepository.saveInstalledApp(installedApp)
+            installedApp
+        } catch (t: Throwable) {
+            Logger.w { "Could not recover installed app from local APK: ${t.message}" }
+            null
         }
     }
 
@@ -840,14 +943,13 @@ class DetailsViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        // Cancel UI collection only — DownloadManager keeps running until the user cancels.
         currentDownloadJob?.cancel()
-
-        currentAssetName?.let { assetName ->
-            cleanupScope.launch {
-                runCatching { downloader.cancelDownload(assetName) }
-            }
-        }
+        currentDownloadJob = null
     }
+
+    private fun notificationTitle(): String? =
+        _state.value.repository?.fullName ?: _state.value.repository?.name
 
     private companion object {
         const val OBTAINIUM_REPO_ID: Long = 523534328

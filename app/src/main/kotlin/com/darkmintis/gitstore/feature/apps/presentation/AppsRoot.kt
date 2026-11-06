@@ -24,10 +24,10 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.GetApp
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Update
+import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -197,7 +197,7 @@ fun AppsScreen(
                     enabled = state.updateAllButtonEnabled
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Update,
+                        imageVector = Icons.Filled.Upgrade,
                         contentDescription = null
                     )
 
@@ -250,7 +250,7 @@ fun AppsScreen(
                     EmptyState(
                         title = stringResource(R.string.no_apps_found),
                         message = stringResource(R.string.apps_empty_message),
-                        icon = Icons.Default.GetApp
+                        icon = Icons.Filled.Download
                     )
                 }
 
@@ -558,7 +558,7 @@ fun AppItemCard(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Update,
+                                    imageVector = Icons.Filled.Upgrade,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp)
                                 )

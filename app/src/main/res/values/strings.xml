@@ -195,8 +195,15 @@
     <string name="update_available">Update available</string>
     <string name="not_available">Not available</string>
     <string name="install_latest">Install latest</string>
+    <string name="install_downloaded">Install downloaded</string>
     <string name="reinstall">Reinstall</string>
     <string name="update_app">Update app</string>
+
+    <!-- Download notifications -->
+    <string name="notification_channel_downloads">Downloads</string>
+    <string name="notification_channel_downloads_desc">Progress and completion for APK downloads</string>
+    <string name="notification_downloading_percent">Downloading · %1$d%%</string>
+    <string name="notification_download_complete">Download complete · Tap to open</string>
 
     <!-- Download stages -->
     <string name="downloading">Downloading</string>

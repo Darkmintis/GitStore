@@ -1,6 +1,7 @@
 package com.darkmintis.gitstore.feature.download_manager.presentation
 
 import com.darkmintis.gitstore.R
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,9 +15,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Android
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.InstallMobile
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,6 +48,7 @@ import org.koin.compose.viewmodel.koinViewModel
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DownloadManagerRoot(
+    onOpenRepo: (Long) -> Unit = {},
     viewModel: DownloadManagerViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -78,35 +82,38 @@ fun DownloadManagerRoot(
             }
 
             when {
-            state.isLoading -> {
-                LoadingState()
-            }
+                state.isLoading && state.downloads.isEmpty() -> {
+                    LoadingState()
+                }
 
-            state.downloads.isEmpty() -> {
-                EmptyState(
-                    title = stringResource(R.string.no_downloads_yet),
-                    message = stringResource(R.string.no_downloads_yet_message),
-                    icon = Icons.Filled.Download
-                )
-            }
+                state.downloads.isEmpty() -> {
+                    EmptyState(
+                        title = stringResource(R.string.no_downloads_yet),
+                        message = stringResource(R.string.no_downloads_yet_message),
+                        icon = Icons.Filled.Download
+                    )
+                }
 
-            else -> {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(state.downloads, key = { it.filePath }) { item ->
-                        DownloadCard(
-                            item = item,
-                            onInstall = { viewModel.installApk(item.filePath) },
-                            onDelete = { viewModel.deleteFile(item.filePath) },
-                            onCancel = { viewModel.cancelDownload(item.fileName) }
-                        )
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(state.downloads, key = { it.filePath }) { item ->
+                            DownloadCard(
+                                item = item,
+                                onInstall = { viewModel.installApk(item.filePath) },
+                                onDelete = { viewModel.deleteFile(item.filePath) },
+                                onCancel = { viewModel.cancelDownload(item.fileName) },
+                                onOpenRepo = {
+                                    item.repoId?.let(onOpenRepo)
+                                }
+                            )
+                        }
                     }
                 }
-            }
             }
         }
     }
@@ -119,9 +126,18 @@ private fun DownloadCard(
     onInstall: () -> Unit,
     onDelete: () -> Unit,
     onCancel: () -> Unit,
+    onOpenRepo: () -> Unit,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (item.repoId != null) {
+                    Modifier.clickable(onClick = onOpenRepo)
+                } else {
+                    Modifier
+                }
+            ),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -136,16 +152,24 @@ private fun DownloadCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = item.fileName,
+                        text = item.title,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = formatSize(item.fileSize),
+                        text = buildString {
+                            if (item.displayName != null) {
+                                append(item.fileName)
+                                append(" · ")
+                            }
+                            append(formatSize(item.fileSize))
+                        },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
@@ -153,17 +177,18 @@ private fun DownloadCard(
                     DownloadStatus.DOWNLOADING -> {
                         IconButton(onClick = onCancel) {
                             Icon(
-                                imageVector = Icons.Filled.Delete,
+                                imageVector = Icons.Filled.Cancel,
                                 contentDescription = stringResource(R.string.cancel),
-                                tint = MaterialTheme.colorScheme.error
+                                tint = DeleteRed
                             )
                         }
                     }
                     DownloadStatus.COMPLETED -> {
                         IconButton(onClick = onInstall) {
                             Icon(
-                                imageVector = Icons.Filled.InstallMobile,
-                                contentDescription = stringResource(R.string.install)
+                                imageVector = Icons.Filled.Android,
+                                contentDescription = stringResource(R.string.install),
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                         Spacer(Modifier.width(4.dp))
@@ -171,7 +196,7 @@ private fun DownloadCard(
                             Icon(
                                 imageVector = Icons.Filled.Delete,
                                 contentDescription = stringResource(R.string.delete),
-                                tint = MaterialTheme.colorScheme.error
+                                tint = DeleteRed
                             )
                         }
                     }
@@ -180,7 +205,7 @@ private fun DownloadCard(
                             Icon(
                                 imageVector = Icons.Filled.Delete,
                                 contentDescription = stringResource(R.string.delete),
-                                tint = MaterialTheme.colorScheme.error
+                                tint = DeleteRed
                             )
                         }
                     }
@@ -203,6 +228,8 @@ private fun DownloadCard(
         }
     }
 }
+
+private val DeleteRed = Color(0xFFD32F2F)
 
 private fun formatSize(bytes: Long): String {
     return when {

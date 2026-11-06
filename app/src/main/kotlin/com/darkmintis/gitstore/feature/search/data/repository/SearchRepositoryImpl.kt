@@ -29,6 +29,7 @@ import com.darkmintis.gitstore.feature.home.domain.model.PaginatedRepos
 import com.darkmintis.gitstore.feature.search.data.repository.dto.GithubReleaseNetworkModel
 import com.darkmintis.gitstore.feature.search.data.repository.utils.LruCache
 import com.darkmintis.gitstore.feature.search.domain.model.ProgrammingLanguage
+import com.darkmintis.gitstore.feature.search.domain.model.SortBy
 import com.darkmintis.gitstore.feature.search.domain.repository.SearchRepository
 import com.darkmintis.gitstore.network.RateLimitException
 import com.darkmintis.gitstore.network.safeApiCall
@@ -43,10 +44,12 @@ class SearchRepositoryImpl(
     override fun searchRepositories(
         query: String,
         language: ProgrammingLanguage,
-        page: Int
+        page: Int,
+        sortBy: SortBy,
     ): Flow<PaginatedRepos> = channelFlow {
         val perPage = 30
         val searchQuery = buildSearchQuery(query, language)
+        val (sort, order) = sortBy.toGithubParams()
 
         try {
             val responseResult = githubNetworkClient.safeApiCall<GithubRepoSearchResponse>(
@@ -57,6 +60,10 @@ class SearchRepositoryImpl(
                     parameter("q", searchQuery)
                     parameter("per_page", perPage)
                     parameter("page", page)
+                    if (sort != null) {
+                        parameter("sort", sort)
+                        parameter("order", order)
+                    }
                 }
             }
 
@@ -83,6 +90,8 @@ class SearchRepositoryImpl(
                 val strict = runStrictFirstRender(
                     firstPageItems = response.items,
                     searchQuery = searchQuery,
+                    sort = sort,
+                    order = order,
                     perPage = perPage,
                     startPage = page,
                     targetCount = tunedTargetCount,
@@ -97,7 +106,7 @@ class SearchRepositoryImpl(
                     if (growingVerified.isNotEmpty()) {
                         send(
                             PaginatedRepos(
-                                repos = growingVerified,
+                                repos = rankSearchResults(growingVerified, query),
                                 hasMore = true,
                                 nextPageIndex = page + 1,
                                 totalCount = total
@@ -108,7 +117,7 @@ class SearchRepositoryImpl(
 
                 send(
                     PaginatedRepos(
-                        repos = strict.verified,
+                        repos = rankSearchResults(strict.verified, query),
                         hasMore = strict.hasMore,
                         nextPageIndex = strict.nextPageIndex,
                         totalCount = total
@@ -152,7 +161,7 @@ class SearchRepositoryImpl(
                     if (filtered.isNotEmpty() || !baseHasMore) {
                         send(
                             PaginatedRepos(
-                                repos = filtered,
+                                repos = rankSearchResults(filtered, query),
                                 hasMore = baseHasMore,
                                 nextPageIndex = page + 1,
                                 totalCount = total
@@ -194,7 +203,12 @@ class SearchRepositoryImpl(
         } else {
             if (clean.any { it.isWhitespace() }) "\"$clean\"" else clean
         }
-        val scope = " in:name,description,readme"
+        // Drop readme — it floods results with repos that only mention the query.
+        val scope = if (clean.any { it.isWhitespace() }) {
+            " in:name,description"
+        } else {
+            " in:name"
+        }
         val common = " archived:false fork:false"
 
         val languageFilter = if (language != ProgrammingLanguage.All && language.queryValue != null) {
@@ -215,6 +229,8 @@ class SearchRepositoryImpl(
     private suspend fun runStrictFirstRender(
         firstPageItems: List<GithubRepoNetworkModel>,
         searchQuery: String,
+        sort: String?,
+        order: String,
         perPage: Int,
         startPage: Int,
         targetCount: Int,
@@ -297,6 +313,10 @@ class SearchRepositoryImpl(
                         parameter("q", searchQuery)
                         parameter("per_page", perPage)
                         parameter("page", nextPage)
+                        if (sort != null) {
+                            parameter("sort", sort)
+                            parameter("order", order)
+                        }
                     }
                 }
 
@@ -398,5 +418,25 @@ class SearchRepositoryImpl(
         }
         return result
     }
+}
+
+/** Prefer exact / prefix name matches so queries like "termux" surface the real app. */
+internal fun rankSearchResults(
+    repos: List<GithubRepoSummary>,
+    query: String,
+): List<GithubRepoSummary> {
+    val needle = query.trim().lowercase()
+    if (needle.isEmpty()) return repos
+    return repos
+        .mapIndexed { index, repo -> Triple(repo, nameRank(repo.name.lowercase(), needle), index) }
+        .sortedWith(compareBy({ it.second }, { it.third }))
+        .map { it.first }
+}
+
+private fun nameRank(name: String, needle: String): Int = when {
+    name == needle -> 0
+    name.startsWith(needle) -> 1
+    name.contains(needle) -> 2
+    else -> 3
 }
 

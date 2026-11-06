@@ -334,7 +334,9 @@ val downloadManagerModule: Module = module {
             downloader = get(),
             installer = get(),
             files = get(),
-            stringProvider = get()
+            stringProvider = get(),
+            installedAppsRepository = get(),
+            detailsRepository = get(),
         )
     }
 }

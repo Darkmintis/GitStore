@@ -228,7 +228,15 @@ fun AppNavigation(
                     }
 
                     entry<GithubStoreGraph.DownloadsScreen> {
-                        DownloadManagerRoot()
+                        DownloadManagerRoot(
+                            onOpenRepo = { repoId ->
+                                navBackStack.add(
+                                    GithubStoreGraph.DetailsScreen(
+                                        repositoryId = repoId
+                                    )
+                                )
+                            }
+                        )
                     }
                 },
                 entryDecorators = listOf(

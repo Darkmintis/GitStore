@@ -23,12 +23,14 @@ import com.darkmintis.gitstore.feature.auth.data.TokenStore
 import com.darkmintis.gitstore.core.data.services.AndroidDownloader
 import com.darkmintis.gitstore.core.data.services.AndroidFileLocationsProvider
 import com.darkmintis.gitstore.core.data.services.AndroidInstaller
+import com.darkmintis.gitstore.core.data.services.DownloadNotifier
 import com.darkmintis.gitstore.core.data.services.Downloader
 import com.darkmintis.gitstore.core.data.services.FileLocationsProvider
 import com.darkmintis.gitstore.core.data.services.Installer
 import com.darkmintis.gitstore.core.data.services.LocalizationManager
 import com.darkmintis.gitstore.core.presentation.utils.AndroidStringProvider
 import com.darkmintis.gitstore.core.presentation.utils.ConnectivityObserver
+import com.darkmintis.gitstore.core.presentation.utils.DeepLinkHandler
 import com.darkmintis.gitstore.core.presentation.utils.StringProvider
 
 val platformModule: Module = module {
@@ -36,10 +38,15 @@ val platformModule: Module = module {
         AndroidStringProvider(androidContext())
     }
 
+    single { DeepLinkHandler() }
+
+    single { DownloadNotifier(androidContext()) }
+
     single<Downloader> {
         AndroidDownloader(
             context = get(),
-            files = get()
+            files = get(),
+            notifier = get(),
         )
     }
 

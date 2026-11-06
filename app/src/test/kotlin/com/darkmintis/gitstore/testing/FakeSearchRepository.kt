@@ -4,6 +4,7 @@ import com.darkmintis.gitstore.core.domain.model.GithubRepoSummary
 import com.darkmintis.gitstore.core.domain.model.GithubUser
 import com.darkmintis.gitstore.feature.home.domain.model.PaginatedRepos
 import com.darkmintis.gitstore.feature.search.domain.model.ProgrammingLanguage
+import com.darkmintis.gitstore.feature.search.domain.model.SortBy
 import com.darkmintis.gitstore.feature.search.domain.repository.SearchRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -12,6 +13,7 @@ class FakeSearchRepository : SearchRepository {
     var lastQuery: String? = null
     var lastLanguage: ProgrammingLanguage? = null
     var lastPage: Int? = null
+    var lastSortBy: SortBy? = null
     var searchCount: Int = 0
     var results: PaginatedRepos = PaginatedRepos(
         repos = emptyList(),
@@ -24,11 +26,13 @@ class FakeSearchRepository : SearchRepository {
     override fun searchRepositories(
         query: String,
         language: ProgrammingLanguage,
-        page: Int
+        page: Int,
+        sortBy: SortBy,
     ): Flow<PaginatedRepos> = flow {
         lastQuery = query
         lastLanguage = language
         lastPage = page
+        lastSortBy = sortBy
         searchCount += 1
         error?.let { throw it }
         emit(results)

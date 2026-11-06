@@ -21,7 +21,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -89,7 +89,7 @@ fun LazyListScope.about(
             HorizontalDivider()
 
             AboutItem(
-                icon = Icons.Filled.SystemUpdate,
+                icon = Icons.Filled.Upgrade,
                 title = stringResource(R.string.updates),
                 actions = {
                     when {

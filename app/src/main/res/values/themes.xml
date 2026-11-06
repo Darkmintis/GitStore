@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- DayNight so cold start matches forced light/dark via AppCompatDelegate. -->
+    <style name="Theme.GitStore" parent="Theme.AppCompat.DayNight.NoActionBar" />
+
+    <style name="Theme.GitStore.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.GitStore</item>
+    </style>
+</resources>

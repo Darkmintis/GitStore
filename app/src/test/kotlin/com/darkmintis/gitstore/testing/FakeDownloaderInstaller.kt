@@ -11,7 +11,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
 class FakeDownloader : Downloader {
-    override fun download(url: String, suggestedFileName: String?): Flow<DownloadProgress> =
+    override fun download(
+        url: String,
+        suggestedFileName: String?,
+        repoId: Long?,
+        displayName: String?,
+    ): Flow<DownloadProgress> =
         flowOf(DownloadProgress(bytesDownloaded = 100, totalBytes = 100, percent = 100))
 
     override suspend fun saveToFile(url: String, suggestedFileName: String?): String =
@@ -22,6 +27,10 @@ class FakeDownloader : Downloader {
     override suspend fun cancelDownload(fileName: String): Boolean = true
 
     override fun getActiveDownloadIds(): Map<String, Long> = emptyMap()
+
+    override fun getRepoIdForFile(fileName: String): Long? = null
+
+    override fun getDisplayNameForFile(fileName: String): String? = null
 }
 
 class FakeInstaller : Installer {
