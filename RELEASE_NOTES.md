@@ -4,6 +4,8 @@
 - **CDN-Served Trending** - the discovered apps list now loads from a global CDN instead of GitHub's plain file server, so the Trending tab opens faster everywhere
 - **Offline Fallback** - the last successfully loaded list is kept on device for up to 48 hours, so Trending still renders when you have no connection instead of showing an empty screen
 - **Saved Results Notice** - a banner makes it clear when you are browsing saved data, shows when that list was last updated, and offers a retry
+- **Background Downloads** - APK downloads keep going after you leave a repo page; progress and completion show in a notification you can tap to open the repo
+- **Smarter Search Sort** - Sort By options are sent to GitHub's API, name matches are boosted after APK verification, and the sheet uses the same radio-row layout as the rest of the app
 
 ### Improvements
 - Trending fetch errors no longer fall through to the live GitHub API more than necessary
@@ -12,19 +14,24 @@
 - Offline screens across Home, Search, Installed Apps and Developer Profile now share one clear WiFi empty state
 - The app retries automatically when the connection comes back, instead of requiring a manual refresh
 - New and Popular no longer show a misleading "no repositories" message while offline
+- Downloads cards show the repo name, open Details on tap, and use clearer Cancel / Install / Delete actions
+- Details shows **Install downloaded** when the APK is already on disk, and **Reinstall** after an install from Downloads or Details
+- Install and Update actions use simple Download / Upgrade icons
+- Dark theme no longer flashes light on cold start (night mode is applied before the first frame)
 
 ### Bug Fixes
 - Fixed a lost trailing space in the German "More Apps by Darkmintis" label that could join two words together
 - Restored full 281-string parity across all seven locales
 - "Update all" now reports the correct number of successfully updated apps
-- Downloads are now cleaned up when you leave the screen instead of leaving partial APKs behind
 - Fixed a rare crash when a finished download reported no local file path
 - The in-app updater no longer offers the version you are already running
 - The offline banner no longer overlaps the status bar or double-pads top app bars
+- Status bar icon contrast now follows the app theme in dark mode
+- SearchViewModel tests no longer race `Dispatchers.IO` against `resetMain()` in CI
 
 ### Under the Hood
 - Trending seed list now resolves through `CachedTrendingDataSource.loadTrending()`, returning a typed result that distinguishes offline from missing data
 - Disk cache stored in `cacheDir/trending_apps.json`, reclaimable by the OS without losing authoritative data
 - Saved snapshots older than 48 hours are discarded so stale data is never presented as current
-- Install/uninstall cleanup runs on a scope that survives the ViewModel, so cancellation cannot strand files
+- DownloadManager jobs survive ViewModel teardown; app notifications deep-link via `gitstore://repo/{id}`
 - Release version name and code are derived from the git tag in CI; local builds fall back to the values in `app/build.gradle.kts`
