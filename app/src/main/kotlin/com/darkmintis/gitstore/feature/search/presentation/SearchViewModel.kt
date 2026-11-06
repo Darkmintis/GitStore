@@ -170,7 +170,8 @@ class SearchViewModel(
                     .searchRepositories(
                         query = _state.value.query,
                         language = _state.value.selectedLanguage,
-                        page = currentPage
+                        page = currentPage,
+                        sortBy = _state.value.selectedSortBy,
                     )
                     .collect { paginatedRepos ->
                         currentPage = paginatedRepos.nextPageIndex
