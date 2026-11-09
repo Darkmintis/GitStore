@@ -365,6 +365,14 @@
     <string name="no_downloads_yet_message">Les APKs téléchargés apparaîtront ici.</string>
     <string name="install">Installer</string>
     <string name="delete">Supprimer</string>
+    <string name="delete_apk">Supprimer l’APK</string>
+    <string name="delete_download_title">Supprimer le téléchargement ?</string>
+    <string name="delete_download_message">Supprimer %1$s ? L’application reste installée. Vous pouvez la télécharger à nouveau.</string>
+    <string name="uninstall">Désinstaller</string>
+    <string name="uninstall_app_title">Désinstaller %1$s ?</string>
+    <string name="uninstall_app_message">L’application et ses données seront supprimées de votre appareil.</string>
+    <string name="install_update">Installer la mise à jour</string>
+    <string name="more_options">Plus d’options</string>
     <string name="favourites_empty_message">Enregistrez vos dépôts favoris pour les retrouver facilement.</string>
     <string name="apps_empty_message">Installez une application open-source depuis GitHub pour gérer ses mises à jour ici.</string>
     <string name="search_idle_title">Trouvez des apps open-source</string>

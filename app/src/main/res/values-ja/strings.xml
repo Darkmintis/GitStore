@@ -369,6 +369,14 @@
     <string name="no_downloads_yet_message">ダウンロードした APK はここに表示され、インストールや削除ができます。</string>
     <string name="install">インストール</string>
     <string name="delete">削除</string>
+    <string name="delete_apk">APK を削除</string>
+    <string name="delete_download_title">ダウンロードを削除しますか？</string>
+    <string name="delete_download_message">%1$s を削除しますか？アプリはインストールされたままです。後で再ダウンロードできます。</string>
+    <string name="uninstall">アンインストール</string>
+    <string name="uninstall_app_title">%1$s をアンインストールしますか？</string>
+    <string name="uninstall_app_message">アプリとそのデータが端末から削除されます。</string>
+    <string name="install_update">アップデートをインストール</string>
+    <string name="more_options">その他のオプション</string>
     <string name="favourites_empty_message">気になるリポジトリを保存してすぐに見つけましょう。</string>
     <string name="apps_empty_message">GitHub リリースから OSS アプリをインストールして、ここで更新を管理しましょう。</string>
     <string name="search_idle_title">OSS アプリを探す</string>

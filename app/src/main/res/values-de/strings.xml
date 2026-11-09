@@ -369,6 +369,14 @@ Erlebnis frei
     <string name="no_downloads_yet_message">Heruntergeladene APKs werden hier zur Installation oder Bereinigung angezeigt.</string>
     <string name="install">Installieren</string>
     <string name="delete">Löschen</string>
+    <string name="delete_apk">APK löschen</string>
+    <string name="delete_download_title">Download löschen?</string>
+    <string name="delete_download_message">%1$s löschen? Die App bleibt installiert. Du kannst sie erneut herunterladen.</string>
+    <string name="uninstall">Deinstallieren</string>
+    <string name="uninstall_app_title">%1$s deinstallieren?</string>
+    <string name="uninstall_app_message">Die App und ihre Daten werden von deinem Gerät entfernt.</string>
+    <string name="install_update">Update installieren</string>
+    <string name="more_options">Weitere Optionen</string>
     <string name="favourites_empty_message">Speichern Sie Repositories, die Ihnen wichtig sind, um sie später schnell zu finden.</string>
     <string name="apps_empty_message">Installieren Sie hier eine Open-Source-App aus GitHub-Versionen, um Updates zu verwalten.</string>
     <string name="search_idle_title">Open-Source-Apps finden</string>

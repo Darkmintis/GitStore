@@ -370,6 +370,14 @@
     <string name="no_downloads_yet_message">Downloaded APKs will appear here for install or cleanup.</string>
     <string name="install">Install</string>
     <string name="delete">Delete</string>
+    <string name="delete_apk">Delete APK</string>
+    <string name="delete_download_title">Delete download?</string>
+    <string name="delete_download_message">Delete %1$s? The app stays installed. You can download it again.</string>
+    <string name="uninstall">Uninstall</string>
+    <string name="uninstall_app_title">Uninstall %1$s?</string>
+    <string name="uninstall_app_message">This removes the app and its data from your phone.</string>
+    <string name="install_update">Install update</string>
+    <string name="more_options">More options</string>
     <string name="favourites_empty_message">Save repositories you care about to find them quickly later.</string>
     <string name="apps_empty_message">Install an open-source app from GitHub releases to manage updates here.</string>
     <string name="search_idle_title">Find open-source apps</string>

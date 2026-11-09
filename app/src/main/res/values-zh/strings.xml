@@ -369,6 +369,14 @@
     <string name="no_downloads_yet_message">已下载的 APK 会显示在这里，供安装或清理。</string>
     <string name="install">安装</string>
     <string name="delete">删除</string>
+    <string name="delete_apk">删除 APK</string>
+    <string name="delete_download_title">删除下载？</string>
+    <string name="delete_download_message">删除 %1$s？应用仍会保留安装，你可以重新下载。</string>
+    <string name="uninstall">卸载</string>
+    <string name="uninstall_app_title">卸载 %1$s？</string>
+    <string name="uninstall_app_message">应用及其数据将从设备中删除。</string>
+    <string name="install_update">安装更新</string>
+    <string name="more_options">更多选项</string>
     <string name="favourites_empty_message">保存您关心的仓库，以便稍后快速找到。</string>
     <string name="apps_empty_message">从 GitHub 版本安装开源应用后，可在此管理更新。</string>
     <string name="search_idle_title">查找开源应用</string>
