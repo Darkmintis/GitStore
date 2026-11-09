@@ -15,6 +15,8 @@
 - The app retries automatically when the connection comes back, instead of requiring a manual refresh
 - New and Popular no longer show a misleading "no repositories" message while offline
 - Downloads cards show the repo name, open Details on tap, and use clearer Cancel / Install / Delete actions
+- Downloads cards now show the repo avatar, app name and APK file name, with a clearer install icon
+- The download notification icon is bolder and easier to read
 - Details shows **Install downloaded** when the APK is already on disk, and **Reinstall** after an install from Downloads or Details
 - Install and Update actions use simple Download / Upgrade icons
 - Dark theme no longer flashes light on cold start (night mode is applied before the first frame)
@@ -26,6 +28,7 @@
 - Fixed a rare crash when a finished download reported no local file path
 - The in-app updater no longer offers the version you are already running
 - The offline banner no longer overlaps the status bar or double-pads top app bars
+- "Install downloaded" no longer appears while an APK is still downloading; partial or corrupt files are removed instead of failing at the system installer
 - Status bar icon contrast now follows the app theme in dark mode
 - SearchViewModel tests no longer race `Dispatchers.IO` against `resetMain()` in CI
 
