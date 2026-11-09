@@ -50,6 +50,7 @@ class HomeRepositoryImpl(
         override fun getTrendingRepositories(
         page: Int,
         forceRefresh: Boolean,
+        isOffline: Boolean,
     ): Flow<PaginatedRepos> = flow {
         if (page == 1) {
             // Paint the saved snapshot first; only hit jsDelivr when it is stale or forced.
@@ -57,7 +58,19 @@ class HomeRepositoryImpl(
             if (cached != null && cached.hasData) {
                 Logger.d { "Serving ${cached.repos.size} saved trending repos immediately" }
                 emit(cached.toPaginated(isFromCache = true))
+                if (isOffline) return@flow
                 if (!forceRefresh && cachedDataSource.isFresh(cached)) return@flow
+            } else if (isOffline) {
+                Logger.d { "No saved trending list while offline" }
+                emit(
+                    PaginatedRepos(
+                        repos = emptyList(),
+                        hasMore = false,
+                        nextPageIndex = 2,
+                        isOffline = true
+                    )
+                )
+                return@flow
             }
 
             val fresh = cachedDataSource.refresh()
@@ -233,13 +246,17 @@ class HomeRepositoryImpl(
         }
     }.flowOn(Dispatchers.IO)
 
-        override fun getNew(page: Int, forceRefresh: Boolean): Flow<PaginatedRepos> {
+        override fun getNew(
+        page: Int,
+        forceRefresh: Boolean,
+        isOffline: Boolean,
+    ): Flow<PaginatedRepos> {
         val thirtyDaysAgo = DateClock.System.now()
             .minus(30.days)
             .toLocalDateTime(TimeZone.UTC)
             .date
 
-        return cachedCategoryFlow("new", page, forceRefresh) {
+        return cachedCategoryFlow("new", page, forceRefresh, isOffline) {
             searchReposWithInstallersFlow(
                 baseQuery = "stars:>5 archived:false created:>=$thirtyDaysAgo",
                 sort = "created",
@@ -250,13 +267,17 @@ class HomeRepositoryImpl(
         }
     }
 
-        override fun getPopular(page: Int, forceRefresh: Boolean): Flow<PaginatedRepos> {
+        override fun getPopular(
+        page: Int,
+        forceRefresh: Boolean,
+        isOffline: Boolean,
+    ): Flow<PaginatedRepos> {
         val threeDaysAgo = DateClock.System.now()
             .minus(3.days)
             .toLocalDateTime(TimeZone.UTC)
             .date
 
-        return cachedCategoryFlow("popular", page, forceRefresh) {
+        return cachedCategoryFlow("popular", page, forceRefresh, isOffline) {
             searchReposWithInstallersFlow(
                 baseQuery = "stars:>50 archived:false pushed:>=$threeDaysAgo",
                 sort = "updated",
@@ -275,6 +296,7 @@ class HomeRepositoryImpl(
         key: String,
         page: Int,
         forceRefresh: Boolean,
+        isOffline: Boolean,
         live: () -> Flow<PaginatedRepos>,
     ): Flow<PaginatedRepos> = flow {
         if (page == 1) {
@@ -289,7 +311,24 @@ class HomeRepositoryImpl(
                         cachedUpdatedAt = cached.lastUpdated,
                     )
                 )
-                if (!forceRefresh && categoryCache.isFresh(cached.lastUpdated)) return@flow
+            }
+
+            if (isOffline) {
+                if (cached == null) {
+                    emit(
+                        PaginatedRepos(
+                            repos = emptyList(),
+                            hasMore = false,
+                            nextPageIndex = 2,
+                            isOffline = true,
+                        )
+                    )
+                }
+                return@flow
+            }
+
+            if (cached != null && !forceRefresh && categoryCache.isFresh(cached.lastUpdated)) {
+                return@flow
             }
         }
 
@@ -396,6 +435,10 @@ class HomeRepositoryImpl(
                                     )
                                     Logger.d { "Emitted ${newItems.size} repos (total: ${results.size})" }
                                     lastEmittedCount = results.size
+                                    if (cacheKey != null && startPage == 1) {
+                                        // Save after each batch so leaving mid-load still caches.
+                                        categoryCache.write(cacheKey, results.toList())
+                                    }
                                 }
                             }
 

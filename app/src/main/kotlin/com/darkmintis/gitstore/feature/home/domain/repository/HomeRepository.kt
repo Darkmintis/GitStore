@@ -7,15 +7,18 @@ interface HomeRepository {
     fun getTrendingRepositories(
         page: Int,
         forceRefresh: Boolean = false,
+        isOffline: Boolean = false,
     ): Flow<PaginatedRepos>
 
     fun getNew(
         page: Int,
         forceRefresh: Boolean = false,
+        isOffline: Boolean = false,
     ): Flow<PaginatedRepos>
 
     fun getPopular(
         page: Int,
         forceRefresh: Boolean = false,
+        isOffline: Boolean = false,
     ): Flow<PaginatedRepos>
 }

@@ -129,15 +129,14 @@ class HomeViewModel(
                 )
             }
 
-            // New/Popular need the live API — skip the slow timeout path when offline.
-            // Trending has its own CDN + disk fallback inside the repository.
-            if (targetCategory != HomeCategory.TRENDING && !connectivityObserver.isOnline.first()) {
+            // Trending, New and Popular all have a saved list; only the live path needs a
+            // connection, so load-more simply stops while offline.
+            val isOffline = !connectivityObserver.isOnline.first()
+            if (isOffline && !isInitial) {
                 _state.update {
                     it.copy(
-                        isLoading = false,
                         isLoadingMore = false,
-                        errorMessage = stringProvider.getString(R.string.error_offline),
-                        repos = if (isInitial) emptyList() else it.repos
+                        errorMessage = stringProvider.getString(R.string.error_offline)
                     )
                 }
                 return@launch
@@ -146,11 +145,11 @@ class HomeViewModel(
             try {
                 val flow = when (targetCategory) {
                     HomeCategory.TRENDING ->
-                        homeRepository.getTrendingRepositories(nextPageIndex, forceRefresh)
+                        homeRepository.getTrendingRepositories(nextPageIndex, forceRefresh, isOffline)
                     HomeCategory.NEW ->
-                        homeRepository.getNew(nextPageIndex, forceRefresh)
+                        homeRepository.getNew(nextPageIndex, forceRefresh, isOffline)
                     HomeCategory.POPULAR ->
-                        homeRepository.getPopular(nextPageIndex, forceRefresh)
+                        homeRepository.getPopular(nextPageIndex, forceRefresh, isOffline)
                 }
 
                 flow.collect { paginatedRepos ->
