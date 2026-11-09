@@ -1,5 +1,6 @@
 package com.darkmintis.gitstore.core.data.services
 
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -49,6 +50,8 @@ class DownloadNotifier(
         return true
     }
 
+    // canNotify() performs the POST_NOTIFICATIONS check; lint cannot see across methods.
+    @SuppressLint("MissingPermission")
     fun notifyProgress(
         fileName: String,
         title: String,
@@ -71,6 +74,7 @@ class DownloadNotifier(
         runCatching { manager.notify(notificationId(fileName), builder.build()) }
     }
 
+    @SuppressLint("MissingPermission")
     fun notifyComplete(
         fileName: String,
         title: String,
