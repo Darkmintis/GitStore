@@ -7,6 +7,8 @@
     <!-- Needed to prompt install of APKs from our app -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- DownloadManager hides its own notification for requests we surface ourselves. -->
+    <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
     <!-- Required to detect whether an arbitrary tracked repo is already installed. Git Store is
          distributed outside Play, where package-visibility filters cannot be declared in advance. -->
     <uses-permission
