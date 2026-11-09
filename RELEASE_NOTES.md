@@ -16,6 +16,8 @@
 - New and Popular no longer show a misleading "no repositories" message while offline
 - Trending, New and Popular can be switched at any time, including while another list is still loading
 - Trending, New and Popular paint their saved list from disk before touching the network, so tabs switch instantly
+- Saved lists are written after each verified batch, so leaving a tab mid-load still caches what was shown
+- Offline, all three tabs show their saved list with the saved-results notice instead of an empty screen
 - Saved lists refresh at most once a day, or immediately when you tap Retry
 - Downloads cards show the repo name, open Details on tap, and use clearer Cancel / Install / Delete actions
 - Downloads cards now show the repo avatar, app name and APK file name, with a clearer install icon
