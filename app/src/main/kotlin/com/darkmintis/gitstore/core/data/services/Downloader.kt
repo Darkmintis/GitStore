@@ -51,4 +51,16 @@ interface Downloader {
      * callers should validate the file before offering it for install.
      */
     suspend fun getFileState(fileName: String): DownloadFileState?
+
+    /**
+     * Reattach to downloads that survived process death so notifications and progress
+     * resume instead of freezing at the last percentage.
+     */
+    suspend fun reconcileActiveDownloads()
+
+    /**
+     * Observe a download that may have been started by an earlier session. Emits nothing
+     * when there is no record, and completes when the transfer finishes or fails.
+     */
+    fun observeProgress(fileName: String): Flow<DownloadProgress>
 }

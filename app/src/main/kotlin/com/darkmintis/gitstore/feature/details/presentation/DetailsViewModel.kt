@@ -34,6 +34,7 @@ import com.darkmintis.gitstore.core.presentation.utils.BrowserHelper
 import com.darkmintis.gitstore.core.presentation.utils.ErrorMapper
 import com.darkmintis.gitstore.core.presentation.utils.StringProvider
 import com.darkmintis.gitstore.core.data.services.Downloader
+import com.darkmintis.gitstore.core.data.services.DownloadFileStatus
 import com.darkmintis.gitstore.core.data.services.Installer
 import com.darkmintis.gitstore.core.domain.model.GithubAsset
 import com.darkmintis.gitstore.core.domain.model.GithubRepoSummary
@@ -213,6 +214,9 @@ class DetailsViewModel(
 
                 val primary = installer.choosePrimaryAsset(installable)
 
+                val downloadState = primary?.let { downloader.getFileState(it.name) }
+                val isDownloadActive = downloadState?.status == DownloadFileStatus.IN_PROGRESS
+
                 val localPath = primary?.let { downloader.getDownloadedFilePath(it.name) }
                 val hasDownloadedApk = localPath != null
 
@@ -255,7 +259,19 @@ class DetailsViewModel(
                     isAppManagerEnabled = isAppManagerEnabled,
                     installedApp = installedApp,
                     hasDownloadedApk = hasDownloadedApk,
+                    isDownloading = isDownloadActive,
+                    downloadProgressPercent = if (isDownloadActive) downloadState?.progress else null,
+                    downloadStage = if (isDownloadActive) {
+                        DownloadStage.DOWNLOADING
+                    } else {
+                        DownloadStage.IDLE
+                    },
                 )
+
+                if (isDownloadActive && primary != null) {
+                    currentAssetName = primary.name
+                    observeActiveDownload(primary.name)
+                }
             } catch (t: CancellationException) {
                 throw t
             } catch (t: Throwable) {
@@ -960,6 +976,44 @@ class DetailsViewModel(
         // Cancel UI collection only — DownloadManager keeps running until the user cancels.
         currentDownloadJob?.cancel()
         currentDownloadJob = null
+    }
+
+    /** Reattach to a download that was started in another screen or before a process restart. */
+    private fun observeActiveDownload(assetName: String) {
+        currentDownloadJob?.cancel()
+        currentDownloadJob = viewModelScope.launch {
+            try {
+                downloader.observeProgress(assetName).collect { progress ->
+                    _state.update {
+                        it.copy(
+                            isDownloading = true,
+                            downloadProgressPercent = progress.percent,
+                            downloadStage = if (progress.percent == 100) {
+                                DownloadStage.VERIFYING
+                            } else {
+                                DownloadStage.DOWNLOADING
+                            },
+                        )
+                    }
+                }
+
+                _state.update {
+                    it.copy(
+                        isDownloading = false,
+                        downloadProgressPercent = null,
+                        downloadStage = DownloadStage.IDLE,
+                        hasDownloadedApk = downloader.getDownloadedFilePath(assetName) != null,
+                    )
+                }
+            } catch (t: CancellationException) {
+                throw t
+            } catch (t: Throwable) {
+                Logger.e { "Failed to observe download $assetName: ${t.message}" }
+                _state.update {
+                    it.copy(isDownloading = false, downloadStage = DownloadStage.IDLE)
+                }
+            }
+        }
     }
 
     private fun notificationTitle(): String? =
