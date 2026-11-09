@@ -39,5 +39,19 @@ class AndroidAppLauncher(
                 false
             }
         }
+
+    override suspend fun launchPackage(packageName: String): Result<Unit> =
+        withContext(Dispatchers.Main) {
+            runCatching {
+                val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+                    ?: throw Exception("No launch intent found for $packageName")
+
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(launchIntent)
+                Logger.d { "Launched app: $packageName" }
+            }.onFailure { error ->
+                Logger.e { "Failed to launch app $packageName: ${error.message}" }
+            }
+        }
 }
 
