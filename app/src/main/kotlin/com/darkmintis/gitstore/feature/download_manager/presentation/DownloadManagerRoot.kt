@@ -40,7 +40,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -158,7 +157,10 @@ private fun DownloadCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                DownloadAvatar(avatarUrl = item.avatarUrl)
+                DownloadAvatar(
+                    avatarUrl = item.avatarUrl,
+                    fallbackText = item.title,
+                )
                 Spacer(Modifier.width(12.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
@@ -243,7 +245,11 @@ private fun DownloadCard(
 private val DeleteRed = Color(0xFFD32F2F)
 
 @Composable
-private fun DownloadAvatar(avatarUrl: String?, size: Dp = 44.dp) {
+private fun DownloadAvatar(
+    avatarUrl: String?,
+    fallbackText: String,
+    size: Dp = 44.dp,
+) {
     val shape = RoundedCornerShape(12.dp)
     val base = Modifier
         .size(size)
@@ -259,11 +265,11 @@ private fun DownloadAvatar(avatarUrl: String?, size: Dp = 44.dp) {
         )
     } else {
         Box(modifier = base, contentAlignment = Alignment.Center) {
-            Icon(
-                painter = painterResource(R.drawable.app_icon),
-                contentDescription = null,
-                modifier = Modifier.size(size),
-                tint = Color.Unspecified,
+            Text(
+                text = fallbackText.trim().take(1).uppercase(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

@@ -95,7 +95,7 @@ class DownloadManagerViewModel(
                 }
                 val repoId = downloader.getRepoIdForFile(file.name)
                 val displayName = downloader.getDisplayNameForFile(file.name)
-                val avatarUrl = downloader.getAvatarUrlForFile(file.name)
+                val avatarUrl = avatarFor(file.name, repoId)
 
                 if (entry != null) {
                     activeItemFromDm(
@@ -128,11 +128,22 @@ class DownloadManagerViewModel(
                     file = File(dir, name),
                     repoId = downloader.getRepoIdForFile(name),
                     displayName = downloader.getDisplayNameForFile(name),
-                    avatarUrl = downloader.getAvatarUrlForFile(name),
+                    avatarUrl = avatarFor(name, null),
                 )
             }
 
         (inFlightOnly + fromDisk).distinctBy { it.fileName }
+    }
+
+    private suspend fun avatarFor(fileName: String, repoId: Long?): String? {
+        val cached = downloader.getAvatarUrlForFile(fileName)
+        if (!cached.isNullOrBlank()) return cached
+
+        // Older downloads have no avatar in their sidecar; fall back to the installed-app row.
+        val id = repoId ?: downloader.getRepoIdForFile(fileName) ?: return null
+        return installedAppsRepository.getAppByRepoId(id)
+            ?.repoOwnerAvatarUrl
+            ?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun itemFromDiskState(
