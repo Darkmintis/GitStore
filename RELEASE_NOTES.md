@@ -35,13 +35,15 @@
 - The in-app updater no longer offers the version you are already running
 - The offline banner no longer overlaps the status bar or double-pads top app bars
 - "Install downloaded" no longer appears while an APK is still downloading; partial or corrupt files are removed instead of failing at the system installer
+- Download progress stays in sync between Details, the Downloads screen and the notification, and resumes after the app is reopened instead of freezing at the last percentage
 - Status bar icon contrast now follows the app theme in dark mode
 - SearchViewModel tests no longer race `Dispatchers.IO` against `resetMain()` in CI
 
 ### Under the Hood
-- Trending seed list now resolves through `CachedTrendingDataSource.loadTrending()`, returning a typed result that distinguishes offline from missing data
-- Disk cache stored in `cacheDir/trending_apps.json`, reclaimable by the OS without losing authoritative data
+- Trending seed list reads the saved snapshot first, then refreshes from jsDelivr; a typed result distinguishes offline from missing data
+- Snapshots are stored in app storage (`filesDir/trending_apps.json`), not the disposable OS cache
 - Saved snapshots older than 48 hours are discarded so stale data is never presented as current
 - Saved home lists live in app storage, not the OS cache, so a cache trim cannot delete them
+- Active downloads are reconciled on app start so notifications and progress survive a process kill
 - DownloadManager jobs survive ViewModel teardown; app notifications deep-link via `gitstore://repo/{id}`
 - Release version name and code are derived from the git tag in CI; local builds fall back to the values in `app/build.gradle.kts`
