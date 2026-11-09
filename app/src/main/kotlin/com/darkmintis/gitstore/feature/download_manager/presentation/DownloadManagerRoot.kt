@@ -19,10 +19,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -35,6 +39,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +52,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.darkmintis.gitstore.core.presentation.components.EmptyState
@@ -59,6 +68,13 @@ fun DownloadManagerRoot(
     viewModel: DownloadManagerViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var deleteTarget by remember { mutableStateOf<DownloadItem?>(null) }
+    var uninstallTarget by remember { mutableStateOf<DownloadItem?>(null) }
+
+    // Returning from the system installer/uninstaller should update the row immediately.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.refreshDownloads()
+    }
 
     Scaffold(
         topBar = {
@@ -112,7 +128,9 @@ fun DownloadManagerRoot(
                             DownloadCard(
                                 item = item,
                                 onInstall = { viewModel.installApk(item.filePath) },
-                                onDelete = { viewModel.deleteFile(item.filePath) },
+                                onOpen = { item.packageName?.let(viewModel::openApp) },
+                                onDeleteRequest = { deleteTarget = item },
+                                onUninstallRequest = { uninstallTarget = item },
                                 onCancel = { viewModel.cancelDownload(item.fileName) },
                                 onOpenRepo = {
                                     item.repoId?.let(onOpenRepo)
@@ -124,6 +142,54 @@ fun DownloadManagerRoot(
             }
         }
     }
+
+    deleteTarget?.let { item ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text(stringResource(R.string.delete_download_title)) },
+            text = {
+                Text(stringResource(R.string.delete_download_message, item.fileName))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteFile(item.filePath)
+                        deleteTarget = null
+                    }
+                ) {
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    uninstallTarget?.let { item ->
+        AlertDialog(
+            onDismissRequest = { uninstallTarget = null },
+            title = { Text(stringResource(R.string.uninstall_app_title, item.title)) },
+            text = { Text(stringResource(R.string.uninstall_app_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.uninstallApp(item)
+                        uninstallTarget = null
+                    }
+                ) {
+                    Text(stringResource(R.string.uninstall))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { uninstallTarget = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -131,7 +197,9 @@ fun DownloadManagerRoot(
 private fun DownloadCard(
     item: DownloadItem,
     onInstall: () -> Unit,
-    onDelete: () -> Unit,
+    onOpen: () -> Unit,
+    onDeleteRequest: () -> Unit,
+    onUninstallRequest: () -> Unit,
     onCancel: () -> Unit,
     onOpenRepo: () -> Unit,
 ) {
@@ -184,10 +252,44 @@ private fun DownloadCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+
+                    if (item.isInstalled) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.CheckCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = if (item.isUpdateAvailable) {
+                                    MaterialTheme.colorScheme.tertiary
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                            )
+                            Text(
+                                text = stringResource(
+                                    if (item.isUpdateAvailable) {
+                                        R.string.update_available
+                                    } else {
+                                        R.string.installed
+                                    }
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (item.isUpdateAvailable) {
+                                    MaterialTheme.colorScheme.tertiary
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
+                    }
                 }
 
-                when (item.status) {
-                    DownloadStatus.DOWNLOADING -> {
+                when {
+                    item.status == DownloadStatus.DOWNLOADING -> {
                         IconButton(onClick = onCancel) {
                             Icon(
                                 imageVector = Icons.Filled.Cancel,
@@ -196,29 +298,43 @@ private fun DownloadCard(
                             )
                         }
                     }
-                    DownloadStatus.COMPLETED -> {
-                        TextButton(onClick = onInstall) {
-                            Text(
-                                text = stringResource(R.string.install),
-                                style = MaterialTheme.typography.labelLarge
-                            )
+
+                    item.status == DownloadStatus.COMPLETED -> {
+                        if (item.isInstalled && !item.isUpdateAvailable) {
+                            TextButton(onClick = onOpen) {
+                                Text(
+                                    text = stringResource(R.string.open),
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        } else {
+                            TextButton(onClick = onInstall) {
+                                Text(
+                                    text = stringResource(
+                                        if (item.isUpdateAvailable) {
+                                            R.string.install_update
+                                        } else {
+                                            R.string.install
+                                        }
+                                    ),
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
                         }
-                        IconButton(onClick = onDelete) {
-                            Icon(
-                                imageVector = Icons.Filled.Delete,
-                                contentDescription = stringResource(R.string.delete),
-                                tint = DeleteRed
-                            )
-                        }
+
+                        DownloadMenu(
+                            canUninstall = item.isInstalled,
+                            onDelete = onDeleteRequest,
+                            onUninstall = onUninstallRequest,
+                        )
                     }
-                    DownloadStatus.FAILED -> {
-                        IconButton(onClick = onDelete) {
-                            Icon(
-                                imageVector = Icons.Filled.Delete,
-                                contentDescription = stringResource(R.string.delete),
-                                tint = DeleteRed
-                            )
-                        }
+
+                    item.status == DownloadStatus.FAILED -> {
+                        DownloadMenu(
+                            canUninstall = false,
+                            onDelete = onDeleteRequest,
+                            onUninstall = onUninstallRequest,
+                        )
                     }
                 }
             }
@@ -241,6 +357,47 @@ private fun DownloadCard(
 }
 
 private val DeleteRed = Color(0xFFD32F2F)
+
+@Composable
+private fun DownloadMenu(
+    canUninstall: Boolean,
+    onDelete: () -> Unit,
+    onUninstall: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(
+                imageVector = Icons.Filled.MoreVert,
+                contentDescription = stringResource(R.string.more_options),
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.delete_apk)) },
+                onClick = {
+                    expanded = false
+                    onDelete()
+                },
+            )
+
+            if (canUninstall) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.uninstall)) },
+                    onClick = {
+                        expanded = false
+                        onUninstall()
+                    },
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun DownloadAvatar(
