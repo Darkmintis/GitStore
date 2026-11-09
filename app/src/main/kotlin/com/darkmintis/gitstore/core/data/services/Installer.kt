@@ -10,6 +10,9 @@ interface Installer {
 
     suspend fun install(filePath: String, extOrMime: String)
 
+    /** Opens the system uninstaller for [packageName]. The OS confirmation is required. */
+    fun uninstall(packageName: String)
+
     fun isAssetInstallable(assetName: String): Boolean
     fun choosePrimaryAsset(assets: List<GithubAsset>): GithubAsset?
     fun detectSystemArchitecture(): Architecture

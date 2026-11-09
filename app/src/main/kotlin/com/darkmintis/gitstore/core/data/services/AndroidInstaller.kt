@@ -114,8 +114,7 @@ class AndroidInstaller(
         }
     }
 
-    override suspend fun install(filePath: String, extOrMime: String) {
-        val file = File(filePath)
+    override suspend fun install(filePath: String, extOrMime: String) {        val file = File(filePath)
         if (!file.exists()) {
             throw IllegalStateException("APK file not found: $filePath")
         }
@@ -139,8 +138,13 @@ class AndroidInstaller(
         }
     }
 
-    override fun isObtainiumInstalled(): Boolean {
-        return try {
+    override fun uninstall(packageName: String) {
+        val intent = Intent(Intent.ACTION_DELETE, "package:$packageName".toUri())
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    }
+
+    override fun isObtainiumInstalled(): Boolean {        return try {
             context.packageManager.getPackageInfo("dev.imranr.obtainium.fdroid", 0)
             true
         } catch (e: Exception) {

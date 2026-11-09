@@ -51,6 +51,8 @@ class FakeInstaller : Installer {
 
     override suspend fun install(filePath: String, extOrMime: String) = Unit
 
+    override fun uninstall(packageName: String) = Unit
+
     override fun isAssetInstallable(assetName: String): Boolean = assetName.endsWith(".apk")
 
     override fun choosePrimaryAsset(assets: List<GithubAsset>): GithubAsset? = assets.firstOrNull()
