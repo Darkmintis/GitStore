@@ -1,8 +1,10 @@
 package com.darkmintis.gitstore.feature.download_manager.presentation
 
 import com.darkmintis.gitstore.R
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,15 +12,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,12 +37,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
 import com.darkmintis.gitstore.core.presentation.components.EmptyState
 import com.darkmintis.gitstore.core.presentation.components.GithubStoreTopBarTitle
 import com.darkmintis.gitstore.core.presentation.components.LoadingState
@@ -150,6 +158,9 @@ private fun DownloadCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                DownloadAvatar(avatarUrl = item.avatarUrl)
+                Spacer(Modifier.width(12.dp))
+
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = item.title,
@@ -186,7 +197,7 @@ private fun DownloadCard(
                     DownloadStatus.COMPLETED -> {
                         IconButton(onClick = onInstall) {
                             Icon(
-                                imageVector = Icons.Filled.Android,
+                                imageVector = Icons.Filled.SystemUpdate,
                                 contentDescription = stringResource(R.string.install),
                                 tint = MaterialTheme.colorScheme.primary
                             )
@@ -230,6 +241,33 @@ private fun DownloadCard(
 }
 
 private val DeleteRed = Color(0xFFD32F2F)
+
+@Composable
+private fun DownloadAvatar(avatarUrl: String?, size: Dp = 44.dp) {
+    val shape = RoundedCornerShape(12.dp)
+    val base = Modifier
+        .size(size)
+        .clip(shape)
+        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+
+    if (avatarUrl != null) {
+        AsyncImage(
+            model = avatarUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = base,
+        )
+    } else {
+        Box(modifier = base, contentAlignment = Alignment.Center) {
+            Icon(
+                painter = painterResource(R.drawable.app_icon),
+                contentDescription = null,
+                modifier = Modifier.size(size),
+                tint = Color.Unspecified,
+            )
+        }
+    }
+}
 
 private fun formatSize(bytes: Long): String {
     return when {
