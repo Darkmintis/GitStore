@@ -23,6 +23,9 @@ import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
+/** Marker written next to an APK once DownloadManager reports success. */
+private const val COMPLETE_SUFFIX = ".complete"
+
 class AndroidDownloader(
     private val context: Context,
     private val files: FileLocationsProvider,
@@ -34,8 +37,8 @@ class AndroidDownloader(
     }
 
     private val activeDownloads = ConcurrentHashMap<String, Long>()
-    private val repoIdsByFile = ConcurrentHashMap<String, Long>()
-    private val displayNamesByFile = ConcurrentHashMap<String, String>()
+    /** repoId, displayName, avatarUrl persisted for each download. */
+    private val metaCache = ConcurrentHashMap<String, Triple<Long?, String?, String?>>()
     private val notifyJobs = ConcurrentHashMap<String, Job>()
     private val notifyScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -44,6 +47,7 @@ class AndroidDownloader(
         suggestedFileName: String?,
         repoId: Long?,
         displayName: String?,
+        avatarUrl: String?,
     ): Flow<DownloadProgress> = flow {
         val dirPath = files.appDownloadsDir()
         val dir = File(dirPath)
@@ -59,11 +63,11 @@ class AndroidDownloader(
             Logger.d { "Deleting existing file before download: ${tentativeDestination.absolutePath}" }
             tentativeDestination.delete()
         }
+        deleteCompleteMarker(dir, safeName)
 
-        if (repoId != null || displayName != null) {
-            if (repoId != null) repoIdsByFile[safeName] = repoId
-            if (displayName != null) displayNamesByFile[safeName] = displayName
-            writeMetaSidecar(dir, safeName, repoId, displayName)
+        if (repoId != null || displayName != null || avatarUrl != null) {
+            metaCache[safeName] = Triple(repoId, displayName, avatarUrl)
+            writeMetaSidecar(dir, safeName, repoId, displayName, avatarUrl)
         }
 
         Logger.d { "Starting download: $url" }
@@ -135,6 +139,7 @@ class AndroidDownloader(
                                 throw IllegalStateException("File not ready after timeout: $finalPath")
                             }
 
+                            markComplete(safeName)
                             Logger.d { "Download complete: $finalPath" }
                             emit(DownloadProgress(downloaded, total, 100))
                             isDone = true
@@ -199,31 +204,45 @@ class AndroidDownloader(
     override suspend fun getDownloadedFilePath(fileName: String): String? =
         withContext(Dispatchers.IO) {
             val file = File(files.appDownloadsDir(), fileName)
+            if (!file.exists() || file.length() == 0L) return@withContext null
 
-            if (file.exists() && file.length() > 0) {
-                file.absolutePath
-            } else {
-                null
-            }
+            // DownloadManager writes into the destination while downloading, so existence
+            // alone is not enough: the transfer must have finished successfully.
+            val state = getFileState(fileName)
+            if (state?.status == DownloadFileStatus.COMPLETED) file.absolutePath else null
         }
 
     override fun getActiveDownloadIds(): Map<String, Long> {
         return activeDownloads.toMap()
     }
 
-    override fun getRepoIdForFile(fileName: String): Long? {
-        repoIdsByFile[fileName]?.let { return it }
-        return readMetaSidecar(File(files.appDownloadsDir()), fileName)
-            .first
-            ?.also { repoIdsByFile[fileName] = it }
-    }
+    override suspend fun getFileState(fileName: String): DownloadFileState? =
+        withContext(Dispatchers.IO) {
+            val dir = File(files.appDownloadsDir())
+            val file = File(dir, fileName)
 
-    override fun getDisplayNameForFile(fileName: String): String? {
-        displayNamesByFile[fileName]?.let { return it }
-        return readMetaSidecar(File(files.appDownloadsDir()), fileName)
-            .second
-            ?.also { displayNamesByFile[fileName] = it }
-    }
+            activeDownloads[fileName]?.let { id ->
+                queryState(id)?.let { return@withContext it }
+            }
+
+            // DownloadManager keeps records after the in-memory map is gone (process death).
+            findDownloadId(fileName)?.let { id ->
+                queryState(id)?.let { return@withContext it }
+            }
+
+            if (!file.exists() || file.length() == 0L) return@withContext null
+            if (hasCompleteMarker(dir, fileName)) {
+                DownloadFileState(DownloadFileStatus.COMPLETED, 100)
+            } else {
+                null
+            }
+        }
+
+    override fun getRepoIdForFile(fileName: String): Long? = metaFor(fileName).first
+
+    override fun getDisplayNameForFile(fileName: String): String? = metaFor(fileName).second
+
+    override fun getAvatarUrlForFile(fileName: String): String? = metaFor(fileName).third
 
     override suspend fun cancelDownload(fileName: String): Boolean =
         withContext(Dispatchers.IO) {
@@ -245,8 +264,8 @@ class AndroidDownloader(
                 deleted = file.delete()
             }
             deleteMetaSidecar(dir, fileName)
-            repoIdsByFile.remove(fileName)
-            displayNamesByFile.remove(fileName)
+            deleteCompleteMarker(dir, fileName)
+            metaCache.remove(fileName)
 
             cancelled || deleted
         }
@@ -281,6 +300,7 @@ class AndroidDownloader(
 
                         when (status) {
                             DownloadManager.STATUS_SUCCESSFUL -> {
+                                markComplete(fileName)
                                 notifier.notifyComplete(fileName, title, repoId)
                                 activeDownloads.remove(fileName)
                                 return@launch
@@ -305,38 +325,117 @@ class AndroidDownloader(
         }
     }
 
-    /** Sidecar format: `repoId|displayName` (either side may be blank). */
+    private fun metaFor(fileName: String): Triple<Long?, String?, String?> {
+        metaCache[fileName]?.let { return it }
+        val meta = readMetaSidecar(File(files.appDownloadsDir()), fileName)
+        metaCache[fileName] = meta
+        return meta
+    }
+
+    private fun queryState(downloadId: Long): DownloadFileState? {
+        val cursor = downloadManager.query(DownloadManager.Query().setFilterById(downloadId))
+        return try {
+            if (!cursor.moveToFirst()) return null
+
+            val status = cursor.getInt(
+                cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)
+            )
+            val downloaded = cursor.getLong(
+                cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+            )
+            val total = cursor.getLong(
+                cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+            )
+            val progress = if (total > 0) ((downloaded * 100L) / total).toInt() else null
+
+            when (status) {
+                DownloadManager.STATUS_SUCCESSFUL ->
+                    DownloadFileState(DownloadFileStatus.COMPLETED, 100)
+                DownloadManager.STATUS_FAILED ->
+                    DownloadFileState(DownloadFileStatus.FAILED)
+                else ->
+                    DownloadFileState(DownloadFileStatus.IN_PROGRESS, progress)
+            }
+        } catch (_: Exception) {
+            null
+        } finally {
+            cursor.close()
+        }
+    }
+
+    /** Newest DownloadManager record for this filename, if one survives. */
+    private fun findDownloadId(fileName: String): Long? {
+        val cursor = downloadManager.query(DownloadManager.Query())
+        return try {
+            val idIndex = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_ID)
+            val uriIndex = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI)
+            var match: Long? = null
+            while (cursor.moveToNext()) {
+                val localUri = cursor.getString(uriIndex) ?: continue
+                if (Uri.parse(localUri).lastPathSegment == fileName) {
+                    val id = cursor.getLong(idIndex)
+                    if (match == null || id > match) match = id
+                }
+            }
+            match
+        } catch (_: Exception) {
+            null
+        } finally {
+            cursor.close()
+        }
+    }
+
+    private fun markComplete(fileName: String) {
+        runCatching {
+            File(files.appDownloadsDir(), "$fileName$COMPLETE_SUFFIX").writeText("1")
+        }
+    }
+
+    private fun hasCompleteMarker(dir: File, fileName: String): Boolean =
+        File(dir, "$fileName$COMPLETE_SUFFIX").exists()
+
+    private fun deleteCompleteMarker(dir: File, fileName: String) {
+        runCatching { File(dir, "$fileName$COMPLETE_SUFFIX").delete() }
+    }
+
+    /** Sidecar format: `repoId|displayName|avatarUrl` (each part may be blank). */
     private fun writeMetaSidecar(
         dir: File,
         fileName: String,
         repoId: Long?,
         displayName: String?,
+        avatarUrl: String?,
     ) {
         runCatching {
             File(dir, "$fileName.meta").writeText(
-                "${repoId ?: ""}|${displayName.orEmpty()}"
+                "${repoId ?: ""}|${displayName.orEmpty()}|${avatarUrl.orEmpty()}"
             )
             // Drop legacy sidecar if present.
             File(dir, "$fileName.repoid").delete()
         }
     }
 
-    private fun readMetaSidecar(dir: File, fileName: String): Pair<Long?, String?> {
+    private fun readMetaSidecar(
+        dir: File,
+        fileName: String,
+    ): Triple<Long?, String?, String?> {
         val meta = File(dir, "$fileName.meta")
         if (meta.exists()) {
             return runCatching {
-                val parts = meta.readText().trim().split("|", limit = 2)
+                val parts = runCatching { meta.readText().trim() }.getOrDefault("")
+                    .split("|", limit = 3)
                 val id = parts.getOrNull(0)?.takeIf { it.isNotBlank() }?.toLongOrNull()
                 val name = parts.getOrNull(1)?.takeIf { it.isNotBlank() }
-                id to name
-            }.getOrElse { null to null }
+                val avatar = parts.getOrNull(2)?.takeIf { it.isNotBlank() }
+                Triple(id, name, avatar)
+            }.getOrElse { Triple(null, null, null) }
         }
         // Legacy .repoid-only sidecars from earlier builds.
         val legacyId = runCatching {
             File(dir, "$fileName.repoid").takeIf { it.exists() }
                 ?.readText()?.trim()?.toLongOrNull()
         }.getOrNull()
-        return legacyId to null
+        return Triple(legacyId, null, null)
     }
 
     private fun deleteMetaSidecar(dir: File, fileName: String) {

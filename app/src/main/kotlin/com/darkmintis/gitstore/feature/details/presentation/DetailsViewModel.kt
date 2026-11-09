@@ -490,6 +490,7 @@ class DetailsViewModel(
                                 suggestedFileName = primary.name,
                                 repoId = repositoryId,
                                 displayName = notificationTitle(),
+                                avatarUrl = repoAvatarUrl(),
                             ).collect { p ->
                                 _state.value =
                                     _state.value.copy(downloadProgressPercent = p.percent)
@@ -604,6 +605,12 @@ class DetailsViewModel(
                 )
 
                 var filePath = downloader.getDownloadedFilePath(assetName)
+                if (filePath != null && !isValidApk(filePath, assetName)) {
+                    Logger.w { "Ignoring incomplete or corrupt local APK: $filePath" }
+                    downloader.cancelDownload(assetName)
+                    filePath = null
+                    _state.value = _state.value.copy(hasDownloadedApk = false)
+                }
                 if (filePath == null) {
                     _state.value = _state.value.copy(downloadStage = DownloadStage.DOWNLOADING)
                     downloader.download(
@@ -611,6 +618,7 @@ class DetailsViewModel(
                         suggestedFileName = assetName,
                         repoId = repositoryId,
                         displayName = notificationTitle(),
+                        avatarUrl = repoAvatarUrl(),
                     ).collect { p ->
                         _state.value = _state.value.copy(downloadProgressPercent = p.percent)
                         if (p.percent == 100) {
@@ -620,6 +628,11 @@ class DetailsViewModel(
 
                     filePath = downloader.getDownloadedFilePath(assetName)
                         ?: throw IllegalStateException("Downloaded file not found")
+
+                    if (!isValidApk(filePath, assetName)) {
+                        downloader.cancelDownload(assetName)
+                        throw IllegalStateException("Download failed: invalid APK")
+                    }
 
                     appendLog(
                         assetName = assetName,
@@ -813,13 +826,14 @@ class DetailsViewModel(
                     suggestedFileName = assetName,
                     repoId = repositoryId,
                     displayName = notificationTitle(),
+                    avatarUrl = repoAvatarUrl(),
                 ).collect { p ->
                     _state.value = _state.value.copy(downloadProgressPercent = p.percent)
                 }
 
                 _state.value = _state.value.copy(
                     isDownloading = false,
-                    hasDownloadedApk = true,
+                    hasDownloadedApk = downloader.getDownloadedFilePath(assetName) != null,
                 )
                 currentAssetName = null
                 appendLog(
@@ -950,6 +964,15 @@ class DetailsViewModel(
 
     private fun notificationTitle(): String? =
         _state.value.repository?.fullName ?: _state.value.repository?.name
+
+    private fun repoAvatarUrl(): String? = _state.value.repository?.owner?.avatarUrl
+
+    private suspend fun isValidApk(filePath: String, assetName: String): Boolean =
+        if (!assetName.lowercase().endsWith(".apk")) {
+            true
+        } else {
+            installer.getApkInfoExtractor().extractPackageInfo(filePath) != null
+        }
 
     private companion object {
         const val OBTAINIUM_REPO_ID: Long = 523534328

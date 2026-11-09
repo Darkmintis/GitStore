@@ -5,11 +5,14 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
+import com.darkmintis.gitstore.R
 import com.darkmintis.gitstore.core.data.local.db.entities.InstallSource
 import com.darkmintis.gitstore.core.data.local.db.entities.InstalledApp
+import com.darkmintis.gitstore.core.data.services.DownloadFileStatus
 import com.darkmintis.gitstore.core.data.services.Downloader
 import com.darkmintis.gitstore.core.data.services.FileLocationsProvider
 import com.darkmintis.gitstore.core.data.services.Installer
+import com.darkmintis.gitstore.core.domain.model.ApkPackageInfo
 import com.darkmintis.gitstore.core.domain.repository.InstalledAppsRepository
 import com.darkmintis.gitstore.core.presentation.utils.ErrorMapper
 import com.darkmintis.gitstore.core.presentation.utils.StringProvider
@@ -81,7 +84,10 @@ class DownloadManagerViewModel(
 
         val fromDisk = dir.listFiles()
             .orEmpty()
-            .filter { it.isFile && !it.name.endsWith(".repoid") && !it.name.endsWith(".meta") }
+            .filter {
+                it.isFile && !it.name.endsWith(".repoid") &&
+                    !it.name.endsWith(".meta") && !it.name.endsWith(".complete")
+            }
             .sortedByDescending { it.lastModified() }
             .map { file ->
                 val entry = activeIds.entries.find { (name, _) ->
@@ -89,6 +95,7 @@ class DownloadManagerViewModel(
                 }
                 val repoId = downloader.getRepoIdForFile(file.name)
                 val displayName = downloader.getDisplayNameForFile(file.name)
+                val avatarUrl = downloader.getAvatarUrlForFile(file.name)
 
                 if (entry != null) {
                     activeItemFromDm(
@@ -97,17 +104,15 @@ class DownloadManagerViewModel(
                         entry.value,
                         file,
                         repoId,
-                        displayName
+                        displayName,
+                        avatarUrl,
                     )
                 } else {
-                    DownloadItem(
-                        fileName = file.name,
-                        filePath = file.absolutePath,
-                        fileSize = file.length(),
-                        status = DownloadStatus.COMPLETED,
-                        progress = 100,
+                    itemFromDiskState(
+                        file = file,
                         repoId = repoId,
                         displayName = displayName,
+                        avatarUrl = avatarUrl,
                     )
                 }
             }
@@ -123,10 +128,70 @@ class DownloadManagerViewModel(
                     file = File(dir, name),
                     repoId = downloader.getRepoIdForFile(name),
                     displayName = downloader.getDisplayNameForFile(name),
+                    avatarUrl = downloader.getAvatarUrlForFile(name),
                 )
             }
 
         (inFlightOnly + fromDisk).distinctBy { it.fileName }
+    }
+
+    private suspend fun itemFromDiskState(
+        file: File,
+        repoId: Long?,
+        displayName: String?,
+        avatarUrl: String?,
+    ): DownloadItem {
+        val state = downloader.getFileState(file.name)
+        return when (state?.status) {
+            DownloadFileStatus.IN_PROGRESS -> DownloadItem(
+                fileName = file.name,
+                filePath = file.absolutePath,
+                fileSize = file.length(),
+                status = DownloadStatus.DOWNLOADING,
+                progress = state.progress,
+                repoId = repoId,
+                displayName = displayName,
+                avatarUrl = avatarUrl,
+            )
+
+            DownloadFileStatus.FAILED -> DownloadItem(
+                fileName = file.name,
+                filePath = file.absolutePath,
+                fileSize = file.length(),
+                status = DownloadStatus.FAILED,
+                repoId = repoId,
+                displayName = displayName,
+                avatarUrl = avatarUrl,
+            )
+
+            DownloadFileStatus.COMPLETED -> DownloadItem(
+                fileName = file.name,
+                filePath = file.absolutePath,
+                fileSize = file.length(),
+                status = DownloadStatus.COMPLETED,
+                progress = 100,
+                repoId = repoId,
+                displayName = displayName,
+                avatarUrl = avatarUrl,
+            )
+
+            null -> {
+                // No DownloadManager record and no completion marker (legacy or orphan):
+                // only offer it for install when it is a readable APK.
+                val valid = installer.getApkInfoExtractor()
+                    .extractPackageInfo(file.absolutePath) != null
+                DownloadItem(
+                    fileName = file.name,
+                    filePath = file.absolutePath,
+                    fileSize = file.length(),
+                    status = if (valid) DownloadStatus.COMPLETED else DownloadStatus.FAILED,
+                    progress = if (valid) 100 else null,
+                    repoId = repoId,
+                    displayName = displayName,
+                    avatarUrl = avatarUrl,
+                )
+            }
+        }
     }
 
     private fun activeItemFromDm(
@@ -136,6 +201,7 @@ class DownloadManagerViewModel(
         file: File,
         repoId: Long?,
         displayName: String?,
+        avatarUrl: String?,
     ): DownloadItem {
         val cursor = downloadManager.query(
             DownloadManager.Query().setFilterById(downloadId)
@@ -173,6 +239,7 @@ class DownloadManagerViewModel(
             progress = progress,
             repoId = repoId,
             displayName = displayName,
+            avatarUrl = avatarUrl,
         )
     }
 
@@ -183,8 +250,26 @@ class DownloadManagerViewModel(
                 val file = File(filePath)
                 val ext = filePath.substringAfterLast('.', "").lowercase()
 
+                if (downloader.getFileState(file.name)?.status == DownloadFileStatus.IN_PROGRESS) {
+                    _state.update {
+                        it.copy(errorMessage = stringProvider.getString(R.string.error_download_failed))
+                    }
+                    return@launch
+                }
+
+                val apkInfo = installer.getApkInfoExtractor().extractPackageInfo(filePath)
+                if (apkInfo == null) {
+                    // Partial or corrupt file: remove it so the row cannot keep offering install.
+                    downloader.cancelDownload(file.name)
+                    _state.update {
+                        it.copy(errorMessage = stringProvider.getString(R.string.error_download_failed))
+                    }
+                    refreshDownloads()
+                    return@launch
+                }
+
                 // Persist before the system installer so Details can show Reinstall immediately.
-                persistInstalledApp(file)
+                persistInstalledApp(file, apkInfo)
 
                 installer.install(filePath, ext)
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -197,13 +282,8 @@ class DownloadManagerViewModel(
         }
     }
 
-    private suspend fun persistInstalledApp(file: File) {
+    private suspend fun persistInstalledApp(file: File, apkInfo: ApkPackageInfo) {
         val repoId = downloader.getRepoIdForFile(file.name) ?: return
-        val apkInfo = installer.getApkInfoExtractor().extractPackageInfo(file.absolutePath)
-        if (apkInfo == null) {
-            Logger.w { "Could not extract APK info for ${file.name}" }
-            return
-        }
 
         val existing = installedAppsRepository.getAppByPackage(apkInfo.packageName)
         if (existing != null) {
@@ -263,12 +343,8 @@ class DownloadManagerViewModel(
 
     fun deleteFile(filePath: String) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                val file = File(filePath)
-                file.delete()
-                File(file.parentFile, "${file.name}.meta").delete()
-                File(file.parentFile, "${file.name}.repoid").delete()
-            }
+            val file = File(filePath)
+            downloader.cancelDownload(file.name)
             refreshDownloads()
         }
     }

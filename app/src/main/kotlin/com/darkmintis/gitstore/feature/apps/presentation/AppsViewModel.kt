@@ -333,6 +333,7 @@ class AppsViewModel(
                     suggestedFileName = latestAssetName,
                     repoId = app.repoId,
                     displayName = app.appName.ifBlank { app.repoName },
+                    avatarUrl = app.repoOwnerAvatarUrl,
                 ).collect { progress ->
                     updateAppProgress(app.packageName, progress.percent)
                 }

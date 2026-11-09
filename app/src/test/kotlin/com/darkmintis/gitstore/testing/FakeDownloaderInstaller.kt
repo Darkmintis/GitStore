@@ -1,6 +1,7 @@
 package com.darkmintis.gitstore.testing
 
 import com.darkmintis.gitstore.core.data.services.ApkInfoExtractor
+import com.darkmintis.gitstore.core.data.services.DownloadFileState
 import com.darkmintis.gitstore.core.data.services.Downloader
 import com.darkmintis.gitstore.core.data.services.Installer
 import com.darkmintis.gitstore.core.domain.model.ApkPackageInfo
@@ -16,6 +17,7 @@ class FakeDownloader : Downloader {
         suggestedFileName: String?,
         repoId: Long?,
         displayName: String?,
+        avatarUrl: String?,
     ): Flow<DownloadProgress> =
         flowOf(DownloadProgress(bytesDownloaded = 100, totalBytes = 100, percent = 100))
 
@@ -31,6 +33,10 @@ class FakeDownloader : Downloader {
     override fun getRepoIdForFile(fileName: String): Long? = null
 
     override fun getDisplayNameForFile(fileName: String): String? = null
+
+    override fun getAvatarUrlForFile(fileName: String): String? = null
+
+    override suspend fun getFileState(fileName: String): DownloadFileState? = null
 }
 
 class FakeInstaller : Installer {
