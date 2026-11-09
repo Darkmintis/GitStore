@@ -4,9 +4,18 @@ import kotlinx.coroutines.flow.Flow
 import com.darkmintis.gitstore.feature.home.domain.model.PaginatedRepos
 
 interface HomeRepository {
-    fun getTrendingRepositories(page: Int): Flow<PaginatedRepos>
-    fun getNew(page: Int): Flow<PaginatedRepos>
-    fun getPopular(page: Int): Flow<PaginatedRepos>
+    fun getTrendingRepositories(
+        page: Int,
+        forceRefresh: Boolean = false,
+    ): Flow<PaginatedRepos>
+
+    fun getNew(
+        page: Int,
+        forceRefresh: Boolean = false,
+    ): Flow<PaginatedRepos>
+
+    fun getPopular(
+        page: Int,
+        forceRefresh: Boolean = false,
+    ): Flow<PaginatedRepos>
 }
-
-

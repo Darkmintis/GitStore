@@ -11,7 +11,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.hours
 
 /**
  * Disk cache for the New/Popular lists so switching tabs, or reopening the app, shows the
@@ -22,7 +22,7 @@ import kotlin.time.Duration.Companion.minutes
  */
 class HomeCategoryCache(
     private val cacheDir: File,
-    private val ttl: Duration = 10.minutes,
+    private val ttl: Duration = 24.hours,
 ) {
     private val json = Json {
         ignoreUnknownKeys = true

@@ -33,6 +33,7 @@ import com.darkmintis.gitstore.core.data.model.GithubRepoNetworkModel
 import com.darkmintis.gitstore.core.data.model.GithubRepoSearchResponse
 import com.darkmintis.gitstore.feature.home.data.data_source.CachedTrendingDataSource
 import com.darkmintis.gitstore.feature.home.data.data_source.HomeCategoryCache
+import com.darkmintis.gitstore.feature.home.data.data_source.TrendingResult
 import com.darkmintis.gitstore.feature.home.data.data_source.toGithubRepoSummary
 import com.darkmintis.gitstore.feature.home.domain.repository.HomeRepository
 import com.darkmintis.gitstore.feature.home.domain.model.PaginatedRepos
@@ -46,36 +47,29 @@ class HomeRepositoryImpl(
     private val categoryCache: HomeCategoryCache,
 ) : HomeRepository {
 
-        override fun getTrendingRepositories(page: Int): Flow<PaginatedRepos> = flow {
+        override fun getTrendingRepositories(
+        page: Int,
+        forceRefresh: Boolean,
+    ): Flow<PaginatedRepos> = flow {
         if (page == 1) {
-            Logger.d { "Attempting to load cached trending repositories..." }
+            // Paint the saved snapshot first; only hit jsDelivr when it is stale or forced.
+            val cached = cachedDataSource.loadCached()
+            if (cached != null && cached.hasData) {
+                Logger.d { "Serving ${cached.repos.size} saved trending repos immediately" }
+                emit(cached.toPaginated(isFromCache = true))
+                if (!forceRefresh && cachedDataSource.isFresh(cached)) return@flow
+            }
 
-            val cachedData = cachedDataSource.loadTrending()
-
-            if (cachedData.hasData) {
-                Logger.d {
-                    buildString {
-                        append("Using trending data: ${cachedData.repos.size} repos")
-                        if (cachedData.isFromDiskCache) append(" (disk cache)")
-                        if (cachedData.isOffline) append(" (offline)")
-                    }
-                }
-
-                val repos = cachedData.repos.map { it.toGithubRepoSummary() }
-
-                emit(
-                    PaginatedRepos(
-                        repos = repos,
-                        hasMore = false,
-                        nextPageIndex = 2,
-                        isFromCache = cachedData.isFromDiskCache,
-                        cachedUpdatedAt = cachedData.lastUpdated
-                    )
-                )
-
+            val fresh = cachedDataSource.refresh()
+            if (fresh.hasData) {
+                emit(fresh.toPaginated(isFromCache = false))
                 return@flow
-            } else if (cachedData.isOffline) {
-                // No seed list and no connection — skip the live search (it will only fail).
+            }
+
+            // Refresh failed: the stale snapshot (if any) is already on screen.
+            if (cached != null) return@flow
+
+            if (fresh.isOffline) {
                 Logger.d { "No cached trending data available while offline" }
                 emit(
                     PaginatedRepos(
@@ -86,9 +80,9 @@ class HomeRepositoryImpl(
                     )
                 )
                 return@flow
-            } else {
-                Logger.d { "No cached data available, falling back to live API" }
             }
+
+            Logger.d { "No cached data available, falling back to live API" }
         }
 
         emitAll(searchReposWithInstallersFlow(page))
@@ -239,13 +233,13 @@ class HomeRepositoryImpl(
         }
     }.flowOn(Dispatchers.IO)
 
-        override fun getNew(page: Int): Flow<PaginatedRepos> {
+        override fun getNew(page: Int, forceRefresh: Boolean): Flow<PaginatedRepos> {
         val thirtyDaysAgo = DateClock.System.now()
             .minus(30.days)
             .toLocalDateTime(TimeZone.UTC)
             .date
 
-        return cachedCategoryFlow("new", page) {
+        return cachedCategoryFlow("new", page, forceRefresh) {
             searchReposWithInstallersFlow(
                 baseQuery = "stars:>5 archived:false created:>=$thirtyDaysAgo",
                 sort = "created",
@@ -256,13 +250,13 @@ class HomeRepositoryImpl(
         }
     }
 
-        override fun getPopular(page: Int): Flow<PaginatedRepos> {
+        override fun getPopular(page: Int, forceRefresh: Boolean): Flow<PaginatedRepos> {
         val threeDaysAgo = DateClock.System.now()
             .minus(3.days)
             .toLocalDateTime(TimeZone.UTC)
             .date
 
-        return cachedCategoryFlow("popular", page) {
+        return cachedCategoryFlow("popular", page, forceRefresh) {
             searchReposWithInstallersFlow(
                 baseQuery = "stars:>50 archived:false pushed:>=$threeDaysAgo",
                 sort = "updated",
@@ -280,6 +274,7 @@ class HomeRepositoryImpl(
     private fun cachedCategoryFlow(
         key: String,
         page: Int,
+        forceRefresh: Boolean,
         live: () -> Flow<PaginatedRepos>,
     ): Flow<PaginatedRepos> = flow {
         if (page == 1) {
@@ -294,12 +289,21 @@ class HomeRepositoryImpl(
                         cachedUpdatedAt = cached.lastUpdated,
                     )
                 )
-                if (categoryCache.isFresh(cached.lastUpdated)) return@flow
+                if (!forceRefresh && categoryCache.isFresh(cached.lastUpdated)) return@flow
             }
         }
 
         emitAll(live())
     }.flowOn(Dispatchers.IO)
+
+    private fun TrendingResult.toPaginated(isFromCache: Boolean): PaginatedRepos =
+        PaginatedRepos(
+            repos = repos.map { it.toGithubRepoSummary() },
+            hasMore = false,
+            nextPageIndex = 2,
+            isFromCache = isFromCache,
+            cachedUpdatedAt = lastUpdated,
+        )
 
     private fun searchReposWithInstallersFlow(
         baseQuery: String,

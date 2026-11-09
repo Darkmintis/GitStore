@@ -98,7 +98,11 @@ class HomeViewModel(
         }
     }
 
-    private fun loadRepos(isInitial: Boolean = false, category: HomeCategory? = null) {
+    private fun loadRepos(
+        isInitial: Boolean = false,
+        category: HomeCategory? = null,
+        forceRefresh: Boolean = false,
+    ) {
         currentJob?.cancel()
 
         val generation = ++loadGeneration
@@ -141,9 +145,12 @@ class HomeViewModel(
 
             try {
                 val flow = when (targetCategory) {
-                    HomeCategory.TRENDING -> homeRepository.getTrendingRepositories(nextPageIndex)
-                    HomeCategory.NEW -> homeRepository.getNew(nextPageIndex)
-                    HomeCategory.POPULAR -> homeRepository.getPopular(nextPageIndex)
+                    HomeCategory.TRENDING ->
+                        homeRepository.getTrendingRepositories(nextPageIndex, forceRefresh)
+                    HomeCategory.NEW ->
+                        homeRepository.getNew(nextPageIndex, forceRefresh)
+                    HomeCategory.POPULAR ->
+                        homeRepository.getPopular(nextPageIndex, forceRefresh)
                 }
 
                 flow.collect { paginatedRepos ->
@@ -245,13 +252,13 @@ class HomeViewModel(
                 viewModelScope.launch {
                     syncInstalledAppsUseCase()
                     nextPageIndex = 1
-                    loadRepos(isInitial = true)
+                    loadRepos(isInitial = true, forceRefresh = true)
                 }
             }
 
             HomeAction.Retry -> {
                 nextPageIndex = 1
-                loadRepos(isInitial = true)
+                loadRepos(isInitial = true, forceRefresh = true)
             }
 
             HomeAction.LoadMore -> {

@@ -38,6 +38,7 @@ const val TRENDING_CACHE_FILE_NAME = "trending_apps.json"
  * fallback. Serving it would present stale content as if it were current.
  */
 private val MAX_CACHE_AGE = 48.hours
+private val FRESH_CACHE_AGE = 24.hours
 
 /**
  * A saved snapshot is only useful while it is recent enough to still reflect the daily list.
@@ -118,6 +119,27 @@ class CachedTrendingDataSource(
         }
 
         TrendingResult(isOffline = fetched?.isOffline == true)
+    }
+
+    /** Disk-only read, no network: lets the UI paint the saved list immediately. */
+    suspend fun loadCached(): TrendingResult? = withContext(Dispatchers.IO) { readCache() }
+
+    /** True while the saved snapshot is recent enough that a refresh can wait. */
+    fun isFresh(cached: TrendingResult): Boolean {
+        val updated = cached.lastUpdated
+            ?.let { runCatching { Instant.parse(it) }.getOrNull() }
+            ?: return false
+        return (Clock.System.now() - updated) <= FRESH_CACHE_AGE
+    }
+
+    /** Network refresh; persists the fresh snapshot on success. */
+    suspend fun refresh(): TrendingResult = withContext(Dispatchers.IO) {
+        val fetched = fetchFromNetwork()
+        if (fetched != null && fetched.repos.isNotEmpty()) {
+            writeCache(fetched)
+            return@withContext fetched
+        }
+        fetched ?: TrendingResult()
     }
 
     private suspend fun fetchFromNetwork(): TrendingResult? {
