@@ -42,5 +42,6 @@
 - Trending seed list now resolves through `CachedTrendingDataSource.loadTrending()`, returning a typed result that distinguishes offline from missing data
 - Disk cache stored in `cacheDir/trending_apps.json`, reclaimable by the OS without losing authoritative data
 - Saved snapshots older than 48 hours are discarded so stale data is never presented as current
+- Saved home lists live in app storage, not the OS cache, so a cache trim cannot delete them
 - DownloadManager jobs survive ViewModel teardown; app notifications deep-link via `gitstore://repo/{id}`
 - Release version name and code are derived from the git tag in CI; local builds fall back to the values in `app/build.gradle.kts`
