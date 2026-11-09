@@ -1,49 +1,40 @@
 # What's New in v1.4.1
 
-### New Features
-- **CDN-Served Trending** - the discovered apps list now loads from a global CDN instead of GitHub's plain file server, so the Trending tab opens faster everywhere
-- **Offline Fallback** - the last successfully loaded list is kept on device for up to 48 hours, so Trending still renders when you have no connection instead of showing an empty screen
-- **Saved Results Notice** - a banner makes it clear when you are browsing saved data, shows when that list was last updated, and offers a retry
-- **Background Downloads** - APK downloads keep going after you leave a repo page; progress and completion show in a notification you can tap to open the repo
-- **Smarter Search Sort** - Sort By options are sent to GitHub's API, name matches are boosted after APK verification, and the sheet uses the same radio-row layout as the rest of the app
+A faster, more reliable Git Store: tabs open from a saved list, downloads keep running in the background, and progress stays in sync everywhere.
+
+### Highlights
+- **Instant tabs** - Trending, New and Popular paint their saved list first, so switching is immediate after the first load. Lists refresh once a day, or when you tap Retry.
+- **Background downloads** - installs keep running when you leave the app or restart it. The notification shows live progress and opens the repo when tapped.
+- **Reliable downloads** - "Install downloaded" only appears when the APK is complete; partial or corrupt files are removed instead of failing at the system installer.
+- **Clearer Downloads** - repo avatar, app name and APK filename, with a clear Install button.
+- **Search sorting** - Most Stars, Most Forks and Best Match are sent to GitHub, and exact or prefix name matches rank first.
 
 ### Improvements
-- Trending fetch errors no longer fall through to the live GitHub API more than necessary
-- Reduced logging noise on the trending fetch path
-- All seven UI locales include the new saved-results notice
-- Offline screens across Home, Search, Installed Apps and Developer Profile now share one clear WiFi empty state
-- The app retries automatically when the connection comes back, instead of requiring a manual refresh
-- New and Popular no longer show a misleading "no repositories" message while offline
-- Trending, New and Popular can be switched at any time, including while another list is still loading
-- Trending, New and Popular paint their saved list from disk before touching the network, so tabs switch instantly
-- Saved lists are written after each verified batch, so leaving a tab mid-load still caches what was shown
-- Offline, all three tabs show their saved list with the saved-results notice instead of an empty screen
-- Saved lists refresh at most once a day, or immediately when you tap Retry
-- Downloads cards show the repo name, open Details on tap, and use clearer Cancel / Install / Delete actions
-- Downloads cards now show the repo avatar, app name and APK file name, with a clearer install icon
-- Downloads falls back to the repo initial when a saved download has no avatar, instead of the app logo
-- The download notification icon is bolder and easier to read
-- Details shows **Install downloaded** when the APK is already on disk, and **Reinstall** after an install from Downloads or Details
-- Install and Update actions use simple Download / Upgrade icons
-- Dark theme no longer flashes light on cold start (night mode is applied before the first frame)
+- Offline, all three tabs keep their saved list, show when it was saved, and offer Retry.
+- Offline screens across Home, Search, Installed Apps and Developer Profile share one WiFi empty state and retry automatically when the connection returns.
+- New and Popular no longer show a misleading "no repositories" message while offline.
+- Trending now loads from the jsDelivr CDN instead of GitHub's file server, so it opens faster.
+- Search is more name-focused, with fewer false matches from README-only mentions.
+- Details shows **Install downloaded** when the APK is on disk and **Reinstall** after installing.
+- Dark mode applies before the first frame, and status bar icons follow the theme.
+- Android 13+ asks for notification permission so download notifications can appear.
+- The download notification icon is bolder and easier to read.
+- All seven UI locales are complete (286 strings each).
 
 ### Bug Fixes
-- Fixed a lost trailing space in the German "More Apps by Darkmintis" label that could join two words together
-- Restored full 281-string parity across all seven locales
-- "Update all" now reports the correct number of successfully updated apps
-- Fixed a rare crash when a finished download reported no local file path
-- The in-app updater no longer offers the version you are already running
-- The offline banner no longer overlaps the status bar or double-pads top app bars
-- "Install downloaded" no longer appears while an APK is still downloading; partial or corrupt files are removed instead of failing at the system installer
-- Download progress stays in sync between Details, the Downloads screen and the notification, and resumes after the app is reopened instead of freezing at the last percentage
-- Status bar icon contrast now follows the app theme in dark mode
-- SearchViewModel tests no longer race `Dispatchers.IO` against `resetMain()` in CI
+- Download progress stays in sync between Details, the Downloads screen and the notification, and resumes after the app is reopened instead of freezing at the last percentage.
+- "Install downloaded" no longer appears while an APK is still downloading.
+- "Update all" reports the correct number of successful updates.
+- The in-app updater no longer offers the version you are already running.
+- Fixed a rare crash when a finished download reported no local file path.
+- The offline banner no longer overlaps the status bar or double-pads top app bars.
+- Downloads uses the repo avatar (or its initial) instead of the GitStore logo.
+- Fixed a lost trailing space in the German "More Apps by Darkmintis" label.
 
 ### Under the Hood
-- Trending seed list reads the saved snapshot first, then refreshes from jsDelivr; a typed result distinguishes offline from missing data
-- Snapshots are stored in app storage (`filesDir/trending_apps.json`), not the disposable OS cache
-- Saved snapshots older than 48 hours are discarded so stale data is never presented as current
-- Saved home lists live in app storage, not the OS cache, so a cache trim cannot delete them
-- Active downloads are reconciled on app start so notifications and progress survive a process kill
-- DownloadManager jobs survive ViewModel teardown; app notifications deep-link via `gitstore://repo/{id}`
-- Release version name and code are derived from the git tag in CI; local builds fall back to the values in `app/build.gradle.kts`
+- Saved lists and the Trending snapshot live in app storage, not the OS cache, so a cache trim cannot delete them.
+- Saved lists are written after each verified batch, so leaving a tab mid-load still caches what was shown; Trending snapshots older than 48 hours are discarded.
+- Active downloads are reconciled on app start, so notifications and progress survive a process kill.
+- DownloadManager jobs survive ViewModel teardown; notifications deep-link via `gitstore://repo/{id}`.
+- Release version name and code come from the git tag in CI; local builds fall back to `app/build.gradle.kts`.
+- CI no longer races `Dispatchers.IO` against the test dispatcher in SearchViewModel tests.
