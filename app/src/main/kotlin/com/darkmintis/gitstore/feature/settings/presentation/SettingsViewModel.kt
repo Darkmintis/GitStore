@@ -35,7 +35,7 @@ import kotlinx.serialization.json.int
 import java.net.HttpURLConnection
 import java.net.URL
 
-private const val LATEST_RELEASE_API_URL = "https://api.github.com/repos/Darkmintis/Git-Store/releases/latest"
+private const val LATEST_RELEASE_API_URL = "https://api.github.com/repos/Darkmintis/GitStore/releases/latest"
 
 class SettingsViewModel(
     private val browserHelper: BrowserHelper,

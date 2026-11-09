@@ -93,7 +93,7 @@ class CachedTrendingDataSource(
      * or SHA: those are cached immutably for a year and would freeze users on day-one data.
      */
     private val baseUrl =
-        "https://cdn.jsdelivr.net/gh/Darkmintis/Git-Store@main/cached-data/trending"
+        "https://cdn.jsdelivr.net/gh/Darkmintis/GitStore@main/cached-data/trending"
 
     suspend fun loadTrending(): TrendingResult = withContext(Dispatchers.IO) {
         val fetched = fetchFromNetwork()
