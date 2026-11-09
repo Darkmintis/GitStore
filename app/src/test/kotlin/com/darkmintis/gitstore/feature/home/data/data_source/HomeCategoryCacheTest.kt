@@ -17,13 +17,14 @@ class HomeCategoryCacheTest {
         try {
             val cache = HomeCategoryCache(dir)
 
-            cache.write("new", listOf(sampleRepo()))
+            cache.write("new", listOf(sampleRepo()), complete = true)
 
             val cached = cache.read("new")
             assertNotNull(cached)
             assertEquals(1, cached.repos.size)
             assertEquals("sample", cached.repos.first().name)
             assertEquals("owner", cached.repos.first().owner.login)
+            assertTrue(cached.complete)
             assertTrue(cache.isFresh(cached.lastUpdated))
         } finally {
             dir.deleteRecursively()
@@ -35,6 +36,21 @@ class HomeCategoryCacheTest {
         val dir = Files.createTempDirectory("home-cache-test").toFile()
         try {
             assertEquals(null, HomeCategoryCache(dir).read("popular"))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `partial cache is marked incomplete`() = runTest {
+        val dir = Files.createTempDirectory("home-cache-test").toFile()
+        try {
+            val cache = HomeCategoryCache(dir)
+            cache.write("new", listOf(sampleRepo()), complete = false)
+
+            val cached = cache.read("new")
+            assertNotNull(cached)
+            assertEquals(false, cached.complete)
         } finally {
             dir.deleteRecursively()
         }

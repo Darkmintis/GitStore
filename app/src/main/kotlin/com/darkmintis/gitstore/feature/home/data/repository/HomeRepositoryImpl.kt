@@ -311,6 +311,9 @@ class HomeRepositoryImpl(
                         cachedUpdatedAt = cached.lastUpdated,
                     )
                 )
+                Logger.d {
+                    "Serving ${cached.repos.size} saved '$key' repos (complete=${cached.complete})"
+                }
             }
 
             if (isOffline) {
@@ -327,7 +330,9 @@ class HomeRepositoryImpl(
                 return@flow
             }
 
-            if (cached != null && !forceRefresh && categoryCache.isFresh(cached.lastUpdated)) {
+            if (cached != null && cached.complete && !forceRefresh &&
+                categoryCache.isFresh(cached.lastUpdated)
+            ) {
                 return@flow
             }
         }
@@ -437,7 +442,7 @@ class HomeRepositoryImpl(
                                     lastEmittedCount = results.size
                                     if (cacheKey != null && startPage == 1) {
                                         // Save after each batch so leaving mid-load still caches.
-                                        categoryCache.write(cacheKey, results.toList())
+                                        categoryCache.write(cacheKey, results.toList(), complete = false)
                                     }
                                 }
                             }
@@ -493,7 +498,7 @@ class HomeRepositoryImpl(
         }
 
         if (cacheKey != null && startPage == 1 && results.isNotEmpty()) {
-            categoryCache.write(cacheKey, results.toList())
+            categoryCache.write(cacheKey, results.toList(), complete = true)
         }
     }.flowOn(Dispatchers.IO)
 

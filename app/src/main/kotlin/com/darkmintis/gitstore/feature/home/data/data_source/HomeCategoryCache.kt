@@ -42,11 +42,16 @@ class HomeCategoryCache(
                 CachedCategory(
                     repos = payload.repositories,
                     lastUpdated = payload.lastUpdated,
+                    complete = payload.complete,
                 )
             }
     }
 
-    suspend fun write(key: String, repos: List<GithubRepoSummary>) = withContext(Dispatchers.IO) {
+    suspend fun write(
+        key: String,
+        repos: List<GithubRepoSummary>,
+        complete: Boolean,
+    ) = withContext(Dispatchers.IO) {
         if (repos.isEmpty()) return@withContext
 
         runCatching {
@@ -54,8 +59,10 @@ class HomeCategoryCache(
             val payload = CachedCategoryFile(
                 lastUpdated = Clock.System.now().toString(),
                 repositories = repos.map { it.toCached() },
+                complete = complete,
             )
             File(cacheDir, "home_$key.json").writeText(json.encodeToString(payload))
+            Logger.d { "Cached ${repos.size} '$key' repos (complete=$complete)" }
         }.onFailure {
             Logger.w { "Could not cache home list '$key': ${it.message}" }
         }
@@ -70,12 +77,15 @@ class HomeCategoryCache(
 data class CachedCategory(
     val repos: List<CachedGithubRepoSummary>,
     val lastUpdated: String,
+    /** False when the list was saved mid-load; the live flow should still finish it. */
+    val complete: Boolean,
 )
 
 @Serializable
 private data class CachedCategoryFile(
     val lastUpdated: String,
     val repositories: List<CachedGithubRepoSummary>,
+    val complete: Boolean = false,
 )
 
 private fun GithubRepoSummary.toCached(): CachedGithubRepoSummary = CachedGithubRepoSummary(
