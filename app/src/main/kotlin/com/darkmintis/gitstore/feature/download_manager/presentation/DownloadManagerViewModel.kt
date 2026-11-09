@@ -46,6 +46,7 @@ class DownloadManagerViewModel(
 ) : ViewModel() {
 
     private val apkInfoCache = ConcurrentHashMap<String, CachedApkInfo>()
+    private val pendingUninstalls = ConcurrentHashMap<String, String>()
 
     private val _state = MutableStateFlow(DownloadManagerState())
     val state = _state
@@ -61,6 +62,7 @@ class DownloadManagerViewModel(
 
     fun refreshDownloads() {
         viewModelScope.launch {
+            settlePendingUninstalls()
             _state.update { it.copy(isLoading = true) }
             val items = loadDownloadItems()
             _state.update { it.copy(downloads = items, isLoading = false) }
@@ -406,6 +408,30 @@ class DownloadManagerViewModel(
                 _state.update {
                     it.copy(errorMessage = ErrorMapper.message(error, stringProvider))
                 }
+            }
+        }
+    }
+
+    fun uninstallApp(item: DownloadItem) {
+        val packageName = item.packageName ?: return
+        pendingUninstalls[item.fileName] = packageName
+        installer.uninstall(packageName)
+    }
+
+    /**
+     * Runs after the system uninstaller returns. If the package is really gone, remove the
+     * downloaded APK and the GitStore bookkeeping row; a cancelled uninstall changes nothing.
+     */
+    private suspend fun settlePendingUninstalls() {
+        if (pendingUninstalls.isEmpty()) return
+
+        val pending = pendingUninstalls.toMap()
+        pendingUninstalls.clear()
+
+        for ((fileName, packageName) in pending) {
+            if (!packageMonitor.isPackageInstalled(packageName)) {
+                downloader.cancelDownload(fileName)
+                installedAppsRepository.deleteInstalledApp(packageName)
             }
         }
     }
