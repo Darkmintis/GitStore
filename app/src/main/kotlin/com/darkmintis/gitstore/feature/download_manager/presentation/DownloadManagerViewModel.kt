@@ -12,8 +12,10 @@ import com.darkmintis.gitstore.core.data.services.DownloadFileStatus
 import com.darkmintis.gitstore.core.data.services.Downloader
 import com.darkmintis.gitstore.core.data.services.FileLocationsProvider
 import com.darkmintis.gitstore.core.data.services.Installer
+import com.darkmintis.gitstore.core.data.services.PackageMonitor
 import com.darkmintis.gitstore.core.domain.model.ApkPackageInfo
 import com.darkmintis.gitstore.core.domain.repository.InstalledAppsRepository
+import com.darkmintis.gitstore.core.presentation.utils.AppLauncher
 import com.darkmintis.gitstore.core.presentation.utils.ErrorMapper
 import com.darkmintis.gitstore.core.presentation.utils.StringProvider
 import com.darkmintis.gitstore.feature.details.domain.repository.DetailsRepository
@@ -29,6 +31,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 class DownloadManagerViewModel(
     private val context: Context,
@@ -38,7 +41,11 @@ class DownloadManagerViewModel(
     private val stringProvider: StringProvider,
     private val installedAppsRepository: InstalledAppsRepository,
     private val detailsRepository: DetailsRepository,
+    private val packageMonitor: PackageMonitor,
+    private val appLauncher: AppLauncher,
 ) : ViewModel() {
+
+    private val apkInfoCache = ConcurrentHashMap<String, CachedApkInfo>()
 
     private val _state = MutableStateFlow(DownloadManagerState())
     val state = _state
@@ -132,7 +139,37 @@ class DownloadManagerViewModel(
                 )
             }
 
-        (inFlightOnly + fromDisk).distinctBy { it.fileName }
+        (inFlightOnly + fromDisk)
+            .distinctBy { it.fileName }
+            .map { item ->
+                if (item.status == DownloadStatus.COMPLETED) {
+                    withInstallState(item)
+                } else {
+                    item
+                }
+            }
+    }
+
+    private suspend fun withInstallState(item: DownloadItem): DownloadItem {
+        val apkInfo = apkInfoFor(item.filePath) ?: return item
+        val installed = packageMonitor.getInstalledPackageInfo(apkInfo.packageName)
+
+        return item.copy(
+            packageName = apkInfo.packageName,
+            apkVersionName = apkInfo.versionName,
+            apkVersionCode = apkInfo.versionCode,
+            isInstalled = installed != null,
+            isUpdateAvailable = installed != null && apkInfo.versionCode > installed.versionCode,
+        )
+    }
+
+    private suspend fun apkInfoFor(filePath: String): ApkPackageInfo? {
+        val size = File(filePath).length()
+        apkInfoCache[filePath]?.takeIf { it.size == size }?.let { return it.info }
+
+        val info = installer.getApkInfoExtractor().extractPackageInfo(filePath)
+        apkInfoCache[filePath] = CachedApkInfo(size, info)
+        return info
     }
 
     private suspend fun avatarFor(
@@ -362,6 +399,21 @@ class DownloadManagerViewModel(
         installedAppsRepository.saveInstalledApp(installedApp)
         Logger.d { "Saved installed app from Downloads: ${apkInfo.packageName} → repo $repoId" }
     }
+
+    fun openApp(packageName: String) {
+        viewModelScope.launch {
+            appLauncher.launchPackage(packageName).onFailure { error ->
+                _state.update {
+                    it.copy(errorMessage = ErrorMapper.message(error, stringProvider))
+                }
+            }
+        }
+    }
+
+    private data class CachedApkInfo(
+        val size: Long,
+        val info: ApkPackageInfo?,
+    )
 
     fun clearError() {
         _state.update { it.copy(errorMessage = null) }

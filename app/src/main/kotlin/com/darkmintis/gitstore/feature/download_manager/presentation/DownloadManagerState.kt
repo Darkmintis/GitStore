@@ -15,6 +15,11 @@ data class DownloadItem(
     val repoId: Long? = null,
     val displayName: String? = null,
     val avatarUrl: String? = null,
+    val packageName: String? = null,
+    val apkVersionName: String? = null,
+    val apkVersionCode: Long? = null,
+    val isInstalled: Boolean = false,
+    val isUpdateAvailable: Boolean = false,
 ) {
     val title: String get() = displayName?.takeIf { it.isNotBlank() } ?: fileName
 }

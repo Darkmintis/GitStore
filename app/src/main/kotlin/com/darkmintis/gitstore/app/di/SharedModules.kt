@@ -348,6 +348,8 @@ val downloadManagerModule: Module = module {
             stringProvider = get(),
             installedAppsRepository = get(),
             detailsRepository = get(),
+            packageMonitor = get(),
+            appLauncher = get(),
         )
     }
 }
