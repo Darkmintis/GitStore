@@ -9,6 +9,7 @@ import com.darkmintis.gitstore.core.domain.model.Architecture
 import com.darkmintis.gitstore.core.domain.model.GithubAsset
 import com.darkmintis.gitstore.feature.details.domain.model.DownloadProgress
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 
 class FakeDownloader : Downloader {
@@ -37,6 +38,10 @@ class FakeDownloader : Downloader {
     override fun getAvatarUrlForFile(fileName: String): String? = null
 
     override suspend fun getFileState(fileName: String): DownloadFileState? = null
+
+    override suspend fun reconcileActiveDownloads() = Unit
+
+    override fun observeProgress(fileName: String): Flow<DownloadProgress> = emptyFlow()
 }
 
 class FakeInstaller : Installer {

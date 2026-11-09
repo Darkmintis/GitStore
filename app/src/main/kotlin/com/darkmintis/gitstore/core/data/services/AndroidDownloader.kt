@@ -238,8 +238,86 @@ class AndroidDownloader(
             }
         }
 
-    override fun getRepoIdForFile(fileName: String): Long? = metaFor(fileName).first
+    override suspend fun reconcileActiveDownloads() = withContext(Dispatchers.IO) {
+        val cursor = downloadManager.query(DownloadManager.Query())
+        try {
+            val idIndex = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_ID)
+            val statusIndex = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)
+            val uriIndex = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI)
 
+            while (cursor.moveToNext()) {
+                val status = cursor.getInt(statusIndex)
+                if (status != DownloadManager.STATUS_PENDING &&
+                    status != DownloadManager.STATUS_RUNNING &&
+                    status != DownloadManager.STATUS_PAUSED
+                ) {
+                    continue
+                }
+
+                val localUri = cursor.getString(uriIndex) ?: continue
+                if (!localUri.contains("ghs_downloads")) continue
+                val fileName = Uri.parse(localUri).lastPathSegment ?: continue
+                val downloadId = cursor.getLong(idIndex)
+
+                activeDownloads[fileName] = downloadId
+                if (notifier.canNotify()) {
+                    startNotifyWatch(
+                        downloadId = downloadId,
+                        fileName = fileName,
+                        title = getDisplayNameForFile(fileName) ?: fileName,
+                        repoId = getRepoIdForFile(fileName),
+                    )
+                }
+            }
+        } finally {
+            cursor.close()
+        }
+    }
+
+    override fun observeProgress(fileName: String): Flow<DownloadProgress> = flow {
+        val downloadId = activeDownloads[fileName] ?: findDownloadId(fileName) ?: return@flow
+
+        while (currentCoroutineContext().isActive) {
+            val cursor = downloadManager.query(
+                DownloadManager.Query().setFilterById(downloadId)
+            )
+            try {
+                if (!cursor.moveToFirst()) return@flow
+
+                val status = cursor.getInt(
+                    cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)
+                )
+                val bytes = cursor.getLong(
+                    cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                )
+                val total = cursor.getLong(
+                    cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+                )
+                val percent = if (total > 0) ((bytes * 100L) / total).toInt() else null
+
+                when (status) {
+                    DownloadManager.STATUS_SUCCESSFUL -> {
+                        markComplete(fileName)
+                        activeDownloads.remove(fileName)
+                        emit(DownloadProgress(bytes, total.takeIf { it > 0 }, 100))
+                        return@flow
+                    }
+
+                    DownloadManager.STATUS_FAILED -> return@flow
+
+                    else -> emit(
+                        DownloadProgress(bytes, total.takeIf { it > 0 }, percent)
+                    )
+                }
+            } finally {
+                cursor.close()
+            }
+
+            delay(500L)
+        }
+    }.flowOn(Dispatchers.IO)
+
+    override fun getRepoIdForFile(fileName: String): Long? = metaFor(fileName).first
     override fun getDisplayNameForFile(fileName: String): String? = metaFor(fileName).second
 
     override fun getAvatarUrlForFile(fileName: String): String? = metaFor(fileName).third
