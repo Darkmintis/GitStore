@@ -15,7 +15,8 @@
 - The app retries automatically when the connection comes back, instead of requiring a manual refresh
 - New and Popular no longer show a misleading "no repositories" message while offline
 - Trending, New and Popular can be switched at any time, including while another list is still loading
-- New and Popular are cached for 10 minutes, so returning to a tab shows its last list instantly
+- Trending, New and Popular paint their saved list from disk before touching the network, so tabs switch instantly
+- Saved lists refresh at most once a day, or immediately when you tap Retry
 - Downloads cards show the repo name, open Details on tap, and use clearer Cancel / Install / Delete actions
 - Downloads cards now show the repo avatar, app name and APK file name, with a clearer install icon
 - Downloads falls back to the repo initial when a saved download has no avatar, instead of the app logo
