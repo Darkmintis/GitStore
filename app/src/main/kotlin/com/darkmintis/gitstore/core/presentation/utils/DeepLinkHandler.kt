@@ -2,10 +2,9 @@ package com.darkmintis.gitstore.core.presentation.utils
 
 import android.content.Intent
 import android.net.Uri
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 
 /** In-app destinations from `gitstore://` intents (notifications, external links). */
 sealed interface DeepLink {
@@ -14,14 +13,15 @@ sealed interface DeepLink {
 }
 
 class DeepLinkHandler {
-    private val _links = MutableSharedFlow<DeepLink>(
-        extraBufferCapacity = 1,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
-    val links: SharedFlow<DeepLink> = _links.asSharedFlow()
+    /**
+     * Buffered so a notification tap that cold-starts the app is not dropped before Compose
+     * starts collecting; CONFLATED keeps only the most recent destination.
+     */
+    private val channel = Channel<DeepLink>(capacity = Channel.CONFLATED)
+    val links: Flow<DeepLink> = channel.receiveAsFlow()
 
     fun offer(link: DeepLink) {
-        _links.tryEmit(link)
+        channel.trySend(link)
     }
 
     fun offerFromIntent(intent: Intent?) {
