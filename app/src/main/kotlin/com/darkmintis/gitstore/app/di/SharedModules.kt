@@ -36,6 +36,7 @@ import com.darkmintis.gitstore.feature.developer_profile.data.repository.Develop
 import com.darkmintis.gitstore.feature.developer_profile.domain.repository.DeveloperProfileRepository
 import com.darkmintis.gitstore.feature.favourites.presentation.FavouritesViewModel
 import com.darkmintis.gitstore.feature.home.data.data_source.CachedTrendingDataSource
+import com.darkmintis.gitstore.feature.home.data.data_source.HomeCategoryCache
 import com.darkmintis.gitstore.feature.home.data.data_source.TRENDING_CACHE_FILE_NAME
 import com.darkmintis.gitstore.feature.home.data.repository.HomeRepositoryImpl
 import com.darkmintis.gitstore.feature.home.domain.repository.HomeRepository
@@ -152,7 +153,14 @@ val homeModule: Module = module {
         HomeRepositoryImpl(
             githubNetworkClient = get(),
             appStateManager = get(),
-            cachedDataSource = get()
+            cachedDataSource = get(),
+            categoryCache = get(),
+        )
+    }
+
+    single<HomeCategoryCache> {
+        HomeCategoryCache(
+            cacheDir = java.io.File(androidContext().cacheDir, "home_cache")
         )
     }
 

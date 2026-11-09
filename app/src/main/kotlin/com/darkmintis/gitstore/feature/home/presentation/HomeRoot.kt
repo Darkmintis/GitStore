@@ -194,7 +194,8 @@ fun HomeScreen(
         ) {
             FilterChips(state, onAction)
 
-            if (state.isShowingCachedData && state.repos.isNotEmpty()) {
+            // Online, a saved list is just a fast first paint; only warn about it when offline.
+            if (state.isShowingCachedData && state.repos.isNotEmpty() && !isOnline) {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 CachedDataNotice(

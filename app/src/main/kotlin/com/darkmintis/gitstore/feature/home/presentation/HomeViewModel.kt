@@ -43,6 +43,7 @@ class HomeViewModel(
     private var hasLoadedInitialData = false
     private var currentJob: Job? = null
     private var nextPageIndex = 1
+    private var loadGeneration = 0
 
     private val _state = MutableStateFlow(HomeState())
     val state = _state
@@ -98,12 +99,9 @@ class HomeViewModel(
     }
 
     private fun loadRepos(isInitial: Boolean = false, category: HomeCategory? = null) {
-        if (_state.value.isLoading || _state.value.isLoadingMore) {
-            Logger.d { "Already loading, skipping..." }
-            return
-        }
-
         currentJob?.cancel()
+
+        val generation = ++loadGeneration
 
         if (isInitial) {
             nextPageIndex = 1
@@ -149,6 +147,9 @@ class HomeViewModel(
                 }
 
                 flow.collect { paginatedRepos ->
+                    // A newer category/page load has taken over; ignore late emissions.
+                    if (generation != loadGeneration) return@collect
+
                     Logger.d { "Received ${paginatedRepos.repos.size} repos, hasMore=${paginatedRepos.hasMore}, nextPage=${paginatedRepos.nextPageIndex}" }
 
                     this@HomeViewModel.nextPageIndex = paginatedRepos.nextPageIndex
@@ -183,12 +184,19 @@ class HomeViewModel(
                     }
 
                     _state.update { currentState ->
-                        val rawList = currentState.repos + newReposWithStatus
+                        // The first live batch replaces the cached snapshot instead of appending
+                        // to it, otherwise the saved list would linger above fresh results.
+                        val replacingCached = isInitial &&
+                            currentState.isShowingCachedData &&
+                            !paginatedRepos.isFromCache
+                        val base = if (replacingCached) emptyList() else currentState.repos
+                        val rawList = base + newReposWithStatus
                         val uniqueList = rawList.distinctBy { it.repository.fullName }
 
                         currentState.copy(
                             repos = uniqueList,
                             hasMorePages = paginatedRepos.hasMore,
+                            isLoading = if (paginatedRepos.isFromCache) false else currentState.isLoading,
                             isShowingCachedData = paginatedRepos.isFromCache,
                             cachedUpdatedAt = paginatedRepos.cachedUpdatedAt,
                             errorMessage = when {
@@ -205,8 +213,10 @@ class HomeViewModel(
                 }
 
                 Logger.d { "Flow completed" }
-                _state.update {
-                    it.copy(isLoading = false, isLoadingMore = false)
+                if (generation == loadGeneration) {
+                    _state.update {
+                        it.copy(isLoading = false, isLoadingMore = false)
+                    }
                 }
 
             } catch (t: Throwable) {
@@ -216,12 +226,14 @@ class HomeViewModel(
                 }
 
                 Logger.e { "Load failed: ${t.message}" }
-                _state.update {
-                    it.copy(
-                        isLoading = false,
-                        isLoadingMore = false,
-                        errorMessage = ErrorMapper.message(t, stringProvider)
-                    )
+                if (generation == loadGeneration) {
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            isLoadingMore = false,
+                            errorMessage = ErrorMapper.message(t, stringProvider)
+                        )
+                    }
                 }
             }
         }

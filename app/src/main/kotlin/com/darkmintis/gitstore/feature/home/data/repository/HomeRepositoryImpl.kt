@@ -32,6 +32,7 @@ import com.darkmintis.gitstore.core.data.mappers.toSummary
 import com.darkmintis.gitstore.core.data.model.GithubRepoNetworkModel
 import com.darkmintis.gitstore.core.data.model.GithubRepoSearchResponse
 import com.darkmintis.gitstore.feature.home.data.data_source.CachedTrendingDataSource
+import com.darkmintis.gitstore.feature.home.data.data_source.HomeCategoryCache
 import com.darkmintis.gitstore.feature.home.data.data_source.toGithubRepoSummary
 import com.darkmintis.gitstore.feature.home.domain.repository.HomeRepository
 import com.darkmintis.gitstore.feature.home.domain.model.PaginatedRepos
@@ -41,7 +42,8 @@ import com.darkmintis.gitstore.network.safeApiCall
 class HomeRepositoryImpl(
     private val githubNetworkClient: HttpClient,
     private val appStateManager: AppStateManager,
-    private val cachedDataSource: CachedTrendingDataSource
+    private val cachedDataSource: CachedTrendingDataSource,
+    private val categoryCache: HomeCategoryCache,
 ) : HomeRepository {
 
         override fun getTrendingRepositories(page: Int): Flow<PaginatedRepos> = flow {
@@ -243,12 +245,15 @@ class HomeRepositoryImpl(
             .toLocalDateTime(TimeZone.UTC)
             .date
 
-        return searchReposWithInstallersFlow(
-            baseQuery = "stars:>5 archived:false created:>=$thirtyDaysAgo",
-            sort = "created",
-            order = "desc",
-            startPage = page
-        )
+        return cachedCategoryFlow("new", page) {
+            searchReposWithInstallersFlow(
+                baseQuery = "stars:>5 archived:false created:>=$thirtyDaysAgo",
+                sort = "created",
+                order = "desc",
+                startPage = page,
+                cacheKey = "new",
+            )
+        }
     }
 
         override fun getPopular(page: Int): Flow<PaginatedRepos> {
@@ -257,20 +262,52 @@ class HomeRepositoryImpl(
             .toLocalDateTime(TimeZone.UTC)
             .date
 
-        return searchReposWithInstallersFlow(
-            baseQuery = "stars:>50 archived:false pushed:>=$threeDaysAgo",
-            sort = "updated",
-            order = "desc",
-            startPage = page
-        )
+        return cachedCategoryFlow("popular", page) {
+            searchReposWithInstallersFlow(
+                baseQuery = "stars:>50 archived:false pushed:>=$threeDaysAgo",
+                sort = "updated",
+                order = "desc",
+                startPage = page,
+                cacheKey = "popular",
+            )
+        }
     }
+
+    /**
+     * Emits the last saved page immediately so tab switches feel instant. A fresh entry is
+     * returned as-is; a stale one is followed by the live flow, which replaces it.
+     */
+    private fun cachedCategoryFlow(
+        key: String,
+        page: Int,
+        live: () -> Flow<PaginatedRepos>,
+    ): Flow<PaginatedRepos> = flow {
+        if (page == 1) {
+            val cached = categoryCache.read(key)
+            if (cached != null) {
+                emit(
+                    PaginatedRepos(
+                        repos = cached.repos.map { it.toGithubRepoSummary() },
+                        hasMore = false,
+                        nextPageIndex = 2,
+                        isFromCache = true,
+                        cachedUpdatedAt = cached.lastUpdated,
+                    )
+                )
+                if (categoryCache.isFresh(cached.lastUpdated)) return@flow
+            }
+        }
+
+        emitAll(live())
+    }.flowOn(Dispatchers.IO)
 
     private fun searchReposWithInstallersFlow(
         baseQuery: String,
         sort: String,
         order: String,
         startPage: Int,
-        desiredCount: Int = 10
+        desiredCount: Int = 10,
+        cacheKey: String? = null,
     ): Flow<PaginatedRepos> = flow {
         val results = mutableListOf<GithubRepoSummary>()
         var currentApiPage = startPage
@@ -406,6 +443,10 @@ class HomeRepositoryImpl(
                 )
             )
             Logger.d { "No results found" }
+        }
+
+        if (cacheKey != null && startPage == 1 && results.isNotEmpty()) {
+            categoryCache.write(cacheKey, results.toList())
         }
     }.flowOn(Dispatchers.IO)
 
