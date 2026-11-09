@@ -5,7 +5,7 @@ Thank you for your interest in contributing to Git Store! This document provides
 ## Getting Started
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/Darkmintis/Git-Store.git`
+2. Clone your fork: `git clone https://github.com/Darkmintis/GitStore.git`
 3. Open the project in Android Studio and sync Gradle
 
 ## Development Setup

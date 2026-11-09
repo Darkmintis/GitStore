@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import com.darkmintis.gitstore.core.domain.repository.ThemesRepository
 import com.darkmintis.gitstore.core.presentation.model.AppTheme
+import com.darkmintis.gitstore.core.presentation.utils.applyAppNightMode
 
 class ThemesRepositoryImpl(
     private val preferences: DataStore<Preferences>
@@ -44,6 +45,7 @@ class ThemesRepositoryImpl(
                 prefs[IS_DARK_THEME_KEY] = isDarkTheme
             }
         }
+        applyAppNightMode(isDarkTheme)
     }
 
 

@@ -1,7 +1,10 @@
 package com.darkmintis.gitstore.feature.download_manager.presentation
 
 import com.darkmintis.gitstore.R
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,14 +12,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.InstallMobile
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,16 +31,22 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
 import com.darkmintis.gitstore.core.presentation.components.EmptyState
 import com.darkmintis.gitstore.core.presentation.components.GithubStoreTopBarTitle
 import com.darkmintis.gitstore.core.presentation.components.LoadingState
@@ -45,6 +55,7 @@ import org.koin.compose.viewmodel.koinViewModel
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DownloadManagerRoot(
+    onOpenRepo: (Long) -> Unit = {},
     viewModel: DownloadManagerViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -78,35 +89,38 @@ fun DownloadManagerRoot(
             }
 
             when {
-            state.isLoading -> {
-                LoadingState()
-            }
+                state.isLoading && state.downloads.isEmpty() -> {
+                    LoadingState()
+                }
 
-            state.downloads.isEmpty() -> {
-                EmptyState(
-                    title = stringResource(R.string.no_downloads_yet),
-                    message = stringResource(R.string.no_downloads_yet_message),
-                    icon = Icons.Filled.Download
-                )
-            }
+                state.downloads.isEmpty() -> {
+                    EmptyState(
+                        title = stringResource(R.string.no_downloads_yet),
+                        message = stringResource(R.string.no_downloads_yet_message),
+                        icon = Icons.Filled.Download
+                    )
+                }
 
-            else -> {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(state.downloads, key = { it.filePath }) { item ->
-                        DownloadCard(
-                            item = item,
-                            onInstall = { viewModel.installApk(item.filePath) },
-                            onDelete = { viewModel.deleteFile(item.filePath) },
-                            onCancel = { viewModel.cancelDownload(item.fileName) }
-                        )
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(state.downloads, key = { it.filePath }) { item ->
+                            DownloadCard(
+                                item = item,
+                                onInstall = { viewModel.installApk(item.filePath) },
+                                onDelete = { viewModel.deleteFile(item.filePath) },
+                                onCancel = { viewModel.cancelDownload(item.fileName) },
+                                onOpenRepo = {
+                                    item.repoId?.let(onOpenRepo)
+                                }
+                            )
+                        }
                     }
                 }
-            }
             }
         }
     }
@@ -119,9 +133,18 @@ private fun DownloadCard(
     onInstall: () -> Unit,
     onDelete: () -> Unit,
     onCancel: () -> Unit,
+    onOpenRepo: () -> Unit,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (item.repoId != null) {
+                    Modifier.clickable(onClick = onOpenRepo)
+                } else {
+                    Modifier
+                }
+            ),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -134,18 +157,32 @@ private fun DownloadCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                DownloadAvatar(
+                    avatarUrl = item.avatarUrl,
+                    fallbackText = item.title,
+                )
+                Spacer(Modifier.width(12.dp))
+
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = item.fileName,
+                        text = item.title,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = formatSize(item.fileSize),
+                        text = buildString {
+                            if (item.displayName != null) {
+                                append(item.fileName)
+                                append(" · ")
+                            }
+                            append(formatSize(item.fileSize))
+                        },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
@@ -153,25 +190,24 @@ private fun DownloadCard(
                     DownloadStatus.DOWNLOADING -> {
                         IconButton(onClick = onCancel) {
                             Icon(
-                                imageVector = Icons.Filled.Delete,
+                                imageVector = Icons.Filled.Cancel,
                                 contentDescription = stringResource(R.string.cancel),
-                                tint = MaterialTheme.colorScheme.error
+                                tint = DeleteRed
                             )
                         }
                     }
                     DownloadStatus.COMPLETED -> {
-                        IconButton(onClick = onInstall) {
-                            Icon(
-                                imageVector = Icons.Filled.InstallMobile,
-                                contentDescription = stringResource(R.string.install)
+                        TextButton(onClick = onInstall) {
+                            Text(
+                                text = stringResource(R.string.install),
+                                style = MaterialTheme.typography.labelLarge
                             )
                         }
-                        Spacer(Modifier.width(4.dp))
                         IconButton(onClick = onDelete) {
                             Icon(
                                 imageVector = Icons.Filled.Delete,
                                 contentDescription = stringResource(R.string.delete),
-                                tint = MaterialTheme.colorScheme.error
+                                tint = DeleteRed
                             )
                         }
                     }
@@ -180,7 +216,7 @@ private fun DownloadCard(
                             Icon(
                                 imageVector = Icons.Filled.Delete,
                                 contentDescription = stringResource(R.string.delete),
-                                tint = MaterialTheme.colorScheme.error
+                                tint = DeleteRed
                             )
                         }
                     }
@@ -200,6 +236,39 @@ private fun DownloadCard(
                     modifier = Modifier.align(Alignment.End)
                 )
             }
+        }
+    }
+}
+
+private val DeleteRed = Color(0xFFD32F2F)
+
+@Composable
+private fun DownloadAvatar(
+    avatarUrl: String?,
+    fallbackText: String,
+    size: Dp = 44.dp,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    val base = Modifier
+        .size(size)
+        .clip(shape)
+        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+
+    if (avatarUrl != null) {
+        AsyncImage(
+            model = avatarUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = base,
+        )
+    } else {
+        Box(modifier = base, contentAlignment = Alignment.Center) {
+            Text(
+                text = fallbackText.trim().take(1).uppercase(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

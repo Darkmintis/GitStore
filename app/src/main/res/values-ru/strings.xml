@@ -197,6 +197,11 @@
     <string name="not_available">Недоступно</string>
     <string name="install_latest">Установить последнюю версию</string>
     <string name="reinstall">Переустановить</string>
+    <string name="install_downloaded">Установить загруженное</string>
+    <string name="notification_channel_downloads">Загрузки</string>
+    <string name="notification_channel_downloads_desc">Ход и завершение загрузок APK</string>
+    <string name="notification_downloading_percent">Загрузка · %1$d%%</string>
+    <string name="notification_download_complete">Загрузка завершена · Нажмите, чтобы открыть</string>
     <string name="update_app">Обновить приложение</string>
 
     <!-- Download stages -->

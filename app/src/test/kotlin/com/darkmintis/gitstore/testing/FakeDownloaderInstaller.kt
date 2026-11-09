@@ -1,6 +1,7 @@
 package com.darkmintis.gitstore.testing
 
 import com.darkmintis.gitstore.core.data.services.ApkInfoExtractor
+import com.darkmintis.gitstore.core.data.services.DownloadFileState
 import com.darkmintis.gitstore.core.data.services.Downloader
 import com.darkmintis.gitstore.core.data.services.Installer
 import com.darkmintis.gitstore.core.domain.model.ApkPackageInfo
@@ -11,7 +12,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
 class FakeDownloader : Downloader {
-    override fun download(url: String, suggestedFileName: String?): Flow<DownloadProgress> =
+    override fun download(
+        url: String,
+        suggestedFileName: String?,
+        repoId: Long?,
+        displayName: String?,
+        avatarUrl: String?,
+    ): Flow<DownloadProgress> =
         flowOf(DownloadProgress(bytesDownloaded = 100, totalBytes = 100, percent = 100))
 
     override suspend fun saveToFile(url: String, suggestedFileName: String?): String =
@@ -22,6 +29,14 @@ class FakeDownloader : Downloader {
     override suspend fun cancelDownload(fileName: String): Boolean = true
 
     override fun getActiveDownloadIds(): Map<String, Long> = emptyMap()
+
+    override fun getRepoIdForFile(fileName: String): Long? = null
+
+    override fun getDisplayNameForFile(fileName: String): String? = null
+
+    override fun getAvatarUrlForFile(fileName: String): String? = null
+
+    override suspend fun getFileState(fileName: String): DownloadFileState? = null
 }
 
 class FakeInstaller : Installer {

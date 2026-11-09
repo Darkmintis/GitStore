@@ -39,6 +39,8 @@ import android.content.res.Configuration
 import java.util.Locale
 import com.darkmintis.gitstore.core.domain.model.TranslationLanguage
 import com.darkmintis.gitstore.core.domain.repository.TranslationRepository
+import com.darkmintis.gitstore.core.presentation.utils.DeepLink
+import com.darkmintis.gitstore.core.presentation.utils.DeepLinkHandler
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -51,6 +53,7 @@ fun App(
     val connectivityObserver: ConnectivityObserver = koinInject()
     val isOnline by connectivityObserver.isOnline.collectAsStateWithLifecycle(initialValue = true)
     val translationRepository: TranslationRepository = koinInject()
+    val deepLinkHandler: DeepLinkHandler = koinInject()
     val targetLanguage by translationRepository.getTargetLanguage().collectAsState(initial = TranslationLanguage.SYSTEM)
 
     val currentLocale = remember(targetLanguage) {
@@ -90,6 +93,10 @@ fun App(
         mutableStateListOf(GithubStoreGraph.HomeScreen)
     }
 
+    val resolvedDarkTheme = state.isDarkTheme ?: isSystemInDarkTheme()
+    // Apply before locale LocalContext override — status bars need the real Activity.
+    ApplyAndroidSystemBars(resolvedDarkTheme)
+
     CompositionLocalProvider(
         LocalContext provides localizedContext,
         LocalConfiguration provides localizedConfiguration
@@ -97,17 +104,15 @@ fun App(
         GithubStoreTheme(
             appTheme = state.currentColorTheme,
             isAmoledTheme = state.isAmoledTheme,
-            isDarkTheme = state.isDarkTheme ?: isSystemInDarkTheme()
+            isDarkTheme = resolvedDarkTheme
         ) {
-        ApplyAndroidSystemBars(state.isDarkTheme)
-
-        LaunchedEffect(state.isCheckingAuth) {
-            if (!state.isCheckingAuth) {
+        LaunchedEffect(state.isCheckingAuth, state.isThemeReady) {
+            if (!state.isCheckingAuth && state.isThemeReady) {
                 onAuthenticationChecked()
             }
         }
 
-        if (state.isCheckingAuth) {
+        if (state.isCheckingAuth || !state.isThemeReady) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -116,6 +121,26 @@ fun App(
             }
 
             return@GithubStoreTheme
+        }
+
+        LaunchedEffect(deepLinkHandler) {
+            deepLinkHandler.links.collect { link ->
+                when (link) {
+                    is DeepLink.Repo -> {
+                        val dest = GithubStoreGraph.DetailsScreen(link.repositoryId)
+                        if (navBackStack.lastOrNull() != dest) {
+                            navBackStack.add(dest)
+                        }
+                    }
+
+                    DeepLink.Downloads -> {
+                        val dest = GithubStoreGraph.DownloadsScreen
+                        if (navBackStack.lastOrNull() != dest) {
+                            navBackStack.add(dest)
+                        }
+                    }
+                }
+            }
         }
 
         Column(modifier = Modifier.fillMaxSize()) {

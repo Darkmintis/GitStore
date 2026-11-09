@@ -197,6 +197,11 @@
     <string name="not_available">利用不可</string>
     <string name="install_latest">最新版をインストール</string>
     <string name="reinstall">再インストール</string>
+    <string name="install_downloaded">ダウンロード済みをインストール</string>
+    <string name="notification_channel_downloads">ダウンロード</string>
+    <string name="notification_channel_downloads_desc">APK のダウンロードの進行状況と完了</string>
+    <string name="notification_downloading_percent">ダウンロード中 · %1$d%%</string>
+    <string name="notification_download_complete">ダウンロード完了 · タップして開く</string>
     <string name="update_app">アプリを更新</string>
 
     <!-- Download stages -->

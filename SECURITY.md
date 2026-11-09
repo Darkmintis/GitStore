@@ -17,8 +17,8 @@ We take security seriously. If you discover a security vulnerability, please fol
 
 Instead:
 
-1. **GitHub Security Advisory**: Use private reporting at [GitHub Security Advisories](https://github.com/Darkmintis/Git-Store/security/advisories/new)
-2. **Email fallback**: If advisory reporting is unavailable, open a private maintainer contact request through [GitHub Issues](https://github.com/Darkmintis/Git-Store/issues/new)
+1. **GitHub Security Advisory**: Use private reporting at [GitHub Security Advisories](https://github.com/Darkmintis/GitStore/security/advisories/new)
+2. **Email fallback**: If advisory reporting is unavailable, open a private maintainer contact request through [GitHub Issues](https://github.com/Darkmintis/GitStore/issues/new)
 
 3. **Include**:
    - Description of the vulnerability

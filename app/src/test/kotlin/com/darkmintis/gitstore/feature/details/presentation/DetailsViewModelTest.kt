@@ -2,7 +2,6 @@ package com.darkmintis.gitstore.feature.details.presentation
 
 import app.cash.turbine.test
 import com.darkmintis.gitstore.R
-import com.darkmintis.gitstore.core.domain.use_cases.SyncInstalledAppsUseCase
 import com.darkmintis.gitstore.testing.FakeBrowserHelper
 import com.darkmintis.gitstore.testing.FakeDetailsRepository
 import com.darkmintis.gitstore.testing.FakeDownloader
@@ -41,10 +40,7 @@ class DetailsViewModelTest : MainDispatcherTest() {
                 )
             ),
             packageMonitor = FakePackageMonitor(),
-            syncInstalledAppsUseCase = SyncInstalledAppsUseCase(
-                FakePackageMonitor(),
-                installed
-            )
+            syncInstalledAppsUseCase = syncInstalledAppsUseCase(installedAppsRepository = installed)
         )
 
         viewModel.state.test {

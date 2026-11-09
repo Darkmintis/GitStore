@@ -2,7 +2,6 @@ package com.darkmintis.gitstore.feature.apps.presentation
 
 import app.cash.turbine.test
 import com.darkmintis.gitstore.R
-import com.darkmintis.gitstore.core.domain.use_cases.SyncInstalledAppsUseCase
 import com.darkmintis.gitstore.testing.FakeAppsRepository
 import com.darkmintis.gitstore.testing.FakeDetailsRepository
 import com.darkmintis.gitstore.testing.FakeDownloader
@@ -33,7 +32,7 @@ class AppsViewModelTest : MainDispatcherTest() {
             installedAppsRepository = installed,
             packageMonitor = FakePackageMonitor(setOf("com.update")),
             detailsRepository = FakeDetailsRepository(),
-            syncInstalledAppsUseCase = SyncInstalledAppsUseCase(
+            syncInstalledAppsUseCase = syncInstalledAppsUseCase(
                 FakePackageMonitor(setOf("com.update")),
                 installed
             ),
@@ -68,10 +67,7 @@ class AppsViewModelTest : MainDispatcherTest() {
             installedAppsRepository = installed,
             packageMonitor = FakePackageMonitor(),
             detailsRepository = FakeDetailsRepository(),
-            syncInstalledAppsUseCase = SyncInstalledAppsUseCase(
-                FakePackageMonitor(),
-                installed
-            ),
+            syncInstalledAppsUseCase = syncInstalledAppsUseCase(installedAppsRepository = installed),
             stringProvider = FakeStringProvider()
         )
 

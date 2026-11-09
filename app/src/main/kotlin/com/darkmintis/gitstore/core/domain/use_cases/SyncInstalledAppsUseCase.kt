@@ -1,5 +1,6 @@
 package com.darkmintis.gitstore.core.domain.use_cases
 import co.touchlab.kermit.Logger
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -18,14 +19,15 @@ import com.darkmintis.gitstore.core.domain.repository.InstalledAppsRepository
  */
 class SyncInstalledAppsUseCase(
     private val packageMonitor: PackageMonitor,
-    private val installedAppsRepository: InstalledAppsRepository
+    private val installedAppsRepository: InstalledAppsRepository,
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     /**
      * Executes the sync operation.
      * 
      * @return Result indicating success or failure with error details
      */
-    suspend operator fun invoke(): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend operator fun invoke(): Result<Unit> = withContext(dispatcher) {
         try {
             val installedPackageNames = packageMonitor.getAllInstalledPackageNames()
             val appsInDb = installedAppsRepository.getAllInstalledApps().first()

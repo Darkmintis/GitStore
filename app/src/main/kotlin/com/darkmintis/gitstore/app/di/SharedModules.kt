@@ -36,6 +36,7 @@ import com.darkmintis.gitstore.feature.developer_profile.data.repository.Develop
 import com.darkmintis.gitstore.feature.developer_profile.domain.repository.DeveloperProfileRepository
 import com.darkmintis.gitstore.feature.favourites.presentation.FavouritesViewModel
 import com.darkmintis.gitstore.feature.home.data.data_source.CachedTrendingDataSource
+import com.darkmintis.gitstore.feature.home.data.data_source.HomeCategoryCache
 import com.darkmintis.gitstore.feature.home.data.data_source.TRENDING_CACHE_FILE_NAME
 import com.darkmintis.gitstore.feature.home.data.repository.HomeRepositoryImpl
 import com.darkmintis.gitstore.feature.home.domain.repository.HomeRepository
@@ -152,14 +153,24 @@ val homeModule: Module = module {
         HomeRepositoryImpl(
             githubNetworkClient = get(),
             appStateManager = get(),
-            cachedDataSource = get()
+            cachedDataSource = get(),
+            categoryCache = get(),
+        )
+    }
+
+    single<HomeCategoryCache> {
+        HomeCategoryCache(
+            // filesDir, not cacheDir: the OS purges cacheDir, which would silently
+            // remove the saved lists and make every tab switch slow again.
+            cacheDir = java.io.File(androidContext().filesDir, "home_cache")
         )
     }
 
     single<CachedTrendingDataSource> {
         CachedTrendingDataSource(
             cacheFile = java.io.File(
-                androidContext().cacheDir,
+                // filesDir, not cacheDir: the OS purged the trending snapshot mid-session.
+                androidContext().filesDir,
                 TRENDING_CACHE_FILE_NAME
             )
         )
@@ -334,7 +345,9 @@ val downloadManagerModule: Module = module {
             downloader = get(),
             installer = get(),
             files = get(),
-            stringProvider = get()
+            stringProvider = get(),
+            installedAppsRepository = get(),
+            detailsRepository = get(),
         )
     }
 }

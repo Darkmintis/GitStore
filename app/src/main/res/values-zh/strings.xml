@@ -197,6 +197,11 @@
     <string name="not_available">不可用</string>
     <string name="install_latest">安装最新版</string>
     <string name="reinstall">重新安装</string>
+    <string name="install_downloaded">安装已下载</string>
+    <string name="notification_channel_downloads">下载</string>
+    <string name="notification_channel_downloads_desc">APK 下载进度与完成情况</string>
+    <string name="notification_downloading_percent">正在下载 · %1$d%%</string>
+    <string name="notification_download_complete">下载完成 · 轻触打开</string>
     <string name="update_app">更新应用</string>
 
     <!-- Download stages -->

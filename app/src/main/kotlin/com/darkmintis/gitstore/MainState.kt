@@ -5,6 +5,7 @@ import com.darkmintis.gitstore.network.RateLimitInfo
 
 data class MainState(
     val isCheckingAuth: Boolean = true,
+    val isThemeReady: Boolean = false,
     val isLoggedIn: Boolean = false,
     val rateLimitInfo: RateLimitInfo? = null,
     val showRateLimitDialog: Boolean = false,
