@@ -14,8 +14,11 @@
 - Offline screens across Home, Search, Installed Apps and Developer Profile now share one clear WiFi empty state
 - The app retries automatically when the connection comes back, instead of requiring a manual refresh
 - New and Popular no longer show a misleading "no repositories" message while offline
+- Trending, New and Popular can be switched at any time, including while another list is still loading
+- New and Popular are cached for 10 minutes, so returning to a tab shows its last list instantly
 - Downloads cards show the repo name, open Details on tap, and use clearer Cancel / Install / Delete actions
 - Downloads cards now show the repo avatar, app name and APK file name, with a clearer install icon
+- Downloads falls back to the repo initial when a saved download has no avatar, instead of the app logo
 - The download notification icon is bolder and easier to read
 - Details shows **Install downloaded** when the APK is already on disk, and **Reinstall** after an install from Downloads or Details
 - Install and Update actions use simple Download / Upgrade icons
