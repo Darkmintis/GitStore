@@ -160,14 +160,17 @@ val homeModule: Module = module {
 
     single<HomeCategoryCache> {
         HomeCategoryCache(
-            cacheDir = java.io.File(androidContext().cacheDir, "home_cache")
+            // filesDir, not cacheDir: the OS purges cacheDir, which would silently
+            // remove the saved lists and make every tab switch slow again.
+            cacheDir = java.io.File(androidContext().filesDir, "home_cache")
         )
     }
 
     single<CachedTrendingDataSource> {
         CachedTrendingDataSource(
             cacheFile = java.io.File(
-                androidContext().cacheDir,
+                // filesDir, not cacheDir: the OS purged the trending snapshot mid-session.
+                androidContext().filesDir,
                 TRENDING_CACHE_FILE_NAME
             )
         )
