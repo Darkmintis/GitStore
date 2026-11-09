@@ -95,7 +95,7 @@ class DownloadManagerViewModel(
                 }
                 val repoId = downloader.getRepoIdForFile(file.name)
                 val displayName = downloader.getDisplayNameForFile(file.name)
-                val avatarUrl = avatarFor(file.name, repoId)
+                val avatarUrl = avatarFor(file.name, repoId, displayName)
 
                 if (entry != null) {
                     activeItemFromDm(
@@ -128,22 +128,37 @@ class DownloadManagerViewModel(
                     file = File(dir, name),
                     repoId = downloader.getRepoIdForFile(name),
                     displayName = downloader.getDisplayNameForFile(name),
-                    avatarUrl = avatarFor(name, null),
+                    avatarUrl = avatarFor(name, null, downloader.getDisplayNameForFile(name)),
                 )
             }
 
         (inFlightOnly + fromDisk).distinctBy { it.fileName }
     }
 
-    private suspend fun avatarFor(fileName: String, repoId: Long?): String? {
+    private suspend fun avatarFor(
+        fileName: String,
+        repoId: Long?,
+        displayName: String?,
+    ): String? {
         val cached = downloader.getAvatarUrlForFile(fileName)
         if (!cached.isNullOrBlank()) return cached
 
         // Older downloads have no avatar in their sidecar; fall back to the installed-app row.
-        val id = repoId ?: downloader.getRepoIdForFile(fileName) ?: return null
-        return installedAppsRepository.getAppByRepoId(id)
-            ?.repoOwnerAvatarUrl
+        val id = repoId ?: downloader.getRepoIdForFile(fileName)
+        if (id != null) {
+            val installed = installedAppsRepository.getAppByRepoId(id)?.repoOwnerAvatarUrl
+            if (!installed.isNullOrBlank()) return installed
+        }
+
+        // Details downloads store "owner/repo" as the display name, so the avatar can be
+        // derived without another API call.
+        val owner = displayName
+            ?.takeIf { it.contains('/') }
+            ?.substringBefore('/')
             ?.takeIf { it.isNotBlank() }
+        if (owner != null) return "https://github.com/$owner.png?size=100"
+
+        return null
     }
 
     private suspend fun itemFromDiskState(

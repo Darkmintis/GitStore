@@ -21,7 +21,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,6 +31,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -197,14 +197,12 @@ private fun DownloadCard(
                         }
                     }
                     DownloadStatus.COMPLETED -> {
-                        IconButton(onClick = onInstall) {
-                            Icon(
-                                imageVector = Icons.Filled.SystemUpdate,
-                                contentDescription = stringResource(R.string.install),
-                                tint = MaterialTheme.colorScheme.primary
+                        TextButton(onClick = onInstall) {
+                            Text(
+                                text = stringResource(R.string.install),
+                                style = MaterialTheme.typography.labelLarge
                             )
                         }
-                        Spacer(Modifier.width(4.dp))
                         IconButton(onClick = onDelete) {
                             Icon(
                                 imageVector = Icons.Filled.Delete,
