@@ -193,6 +193,11 @@
     <string name="not_available">Indisponible</string>
     <string name="install_latest">Installer la dernière version</string>
     <string name="reinstall">Réinstaller</string>
+    <string name="install_downloaded">Installer le téléchargé</string>
+    <string name="notification_channel_downloads">Téléchargements</string>
+    <string name="notification_channel_downloads_desc">Progression et fin des téléchargements APK</string>
+    <string name="notification_downloading_percent">Téléchargement · %1$d%%</string>
+    <string name="notification_download_complete">Téléchargement terminé · Touchez pour ouvrir</string>
     <string name="update_app">Mettre à jour l\'application</string>
 
     <!-- Download stages -->
