@@ -13,12 +13,12 @@ plugins {
 // These are only fallbacks for local builds; do not hand-bump them for a release.
 val appVersionName: String = providers.gradleProperty("appVersionName").orNull?.takeIf { it.isNotBlank() }
     ?: System.getenv("APP_VERSION_NAME")?.takeIf { it.isNotBlank() }
-    ?: "1.4.1"
+    ?: "1.5.0"
 
 val appVersionCode: Int = (providers.gradleProperty("appVersionCode").orNull?.takeIf { it.isNotBlank() }
     ?: System.getenv("APP_VERSION_CODE")?.takeIf { it.isNotBlank() })
     ?.toIntOrNull()
-    ?: 10401
+    ?: 10500
 
 // GitHub OAuth Client ID (public for Device Flow)
 val githubClientId = "Ov23linXkLavDNV3zFMB"

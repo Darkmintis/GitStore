@@ -7,9 +7,21 @@ import androidx.core.net.toUri
 
 object GitStoreLinks {
     const val REPOSITORY = "https://github.com/Darkmintis/GitStore"
+    const val DATA_REPOSITORY = "https://github.com/Darkmintis/GitStore-data"
     const val DEVELOPER_SITE = "https://darkmintis.dev"
     const val NEW_BUG_REPORT =
         "https://github.com/Darkmintis/GitStore/issues/new?template=bug_report.yml"
+
+    /** v1.5+ catalog / trending CDN (GitStore-data). */
+    const val DATA_CDN_TRENDING =
+        "https://cdn.jsdelivr.net/gh/Darkmintis/GitStore-data@main/trending"
+
+    /**
+     * Pre-1.5 clients still read this path. Keep publishing here until those
+     * installs age out — see TODO.md.
+     */
+    const val LEGACY_CDN_TRENDING =
+        "https://cdn.jsdelivr.net/gh/Darkmintis/GitStore@main/cached-data/trending"
 }
 
 fun Context.openWebUrl(url: String) {

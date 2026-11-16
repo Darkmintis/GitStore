@@ -26,6 +26,7 @@ import kotlinx.serialization.json.Json
 import kotlin.time.Duration.Companion.hours
 import com.darkmintis.gitstore.core.domain.model.GithubRepoSummary
 import com.darkmintis.gitstore.core.domain.model.GithubUser
+import com.darkmintis.gitstore.core.presentation.utils.GitStoreLinks
 
 /**
  * On-disk name for the offline copy of the trending list. Lives in the app's cacheDir so the
@@ -91,9 +92,12 @@ class CachedTrendingDataSource(
      * `@main` is deliberate — jsDelivr revalidates branch refs within minutes, so the daily
      * run of scripts/discover.py propagates to users automatically. Never pin this to a tag
      * or SHA: those are cached immutably for a year and would freeze users on day-one data.
+     *
+     * v1.5 reads [GitStoreLinks.DATA_CDN_TRENDING] first; legacy app-repo JSON is only a
+     * bootstrap fallback if the data repo is empty/unreachable (see TODO.md).
      */
-    private val baseUrl =
-        "https://cdn.jsdelivr.net/gh/Darkmintis/GitStore@main/cached-data/trending"
+    private val primaryBaseUrl = GitStoreLinks.DATA_CDN_TRENDING
+    private val legacyBaseUrl = GitStoreLinks.LEGACY_CDN_TRENDING
 
     suspend fun loadTrending(): TrendingResult = withContext(Dispatchers.IO) {
         val fetched = fetchFromNetwork()
@@ -143,8 +147,21 @@ class CachedTrendingDataSource(
     }
 
     private suspend fun fetchFromNetwork(): TrendingResult? {
-        val url = "$baseUrl/apps.json"
+        val primary = fetchTrendingJson("$primaryBaseUrl/apps.json")
+        if (primary != null && primary.repos.isNotEmpty()) return primary
 
+        // Data repo not published yet / CDN lag — old path still updated for ≤1.4.x clients.
+        if (primary?.isOffline != true) {
+            Logger.d { "Primary trending CDN miss; trying legacy app-repo JSON" }
+            val legacy = fetchTrendingJson("$legacyBaseUrl/apps.json")
+            if (legacy != null && legacy.repos.isNotEmpty()) return legacy
+            if (legacy?.isOffline == true) return legacy
+        }
+
+        return primary
+    }
+
+    private suspend fun fetchTrendingJson(url: String): TrendingResult? {
         return try {
             val response: HttpResponse = httpClient.get(url)
 
@@ -161,10 +178,10 @@ class CachedTrendingDataSource(
                     )
                 }
             } else if (response.status.value == 404) {
-                Logger.w { "⚠️ Cached trending data not found (404) - may not be generated yet" }
+                Logger.w { "⚠️ Trending JSON not found (404) at $url" }
                 null
             } else {
-                Logger.e { "❌ Failed to fetch trending repos: HTTP ${response.status.value}" }
+                Logger.e { "❌ Failed to fetch trending repos: HTTP ${response.status.value} ($url)" }
                 null
             }
         } catch (e: HttpRequestTimeoutException) {
