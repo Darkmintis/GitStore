@@ -119,13 +119,19 @@ val coreModule: Module = module {
     }
 
     // ViewModels
+    single {
+        com.darkmintis.gitstore.core.data.GitStoreUpdatePreferences(preferences = get())
+    }
+
     viewModel {
         MainViewModel(
             tokenDataSource = get(),
             themesRepository = get(),
             appStateManager = get(),
             installedAppsRepository = get(),
-            packageMonitor = get()
+            packageMonitor = get(),
+            updatePreferences = get(),
+            browserHelper = get(),
         )
     }
 }

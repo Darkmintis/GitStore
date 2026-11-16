@@ -22,6 +22,7 @@ import androidx.savedstate.compose.serialization.serializers.SnapshotStateListSe
 import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.compose.koinInject
+import com.darkmintis.gitstore.app.app_state.components.AppUpdateDialog
 import com.darkmintis.gitstore.app.app_state.components.RateLimitDialog
 import com.darkmintis.gitstore.app.navigation.AppNavigation
 import com.darkmintis.gitstore.app.navigation.GithubStoreGraph
@@ -169,6 +170,16 @@ fun App(
                             viewModel.onAction(MainAction.DismissRateLimitDialog)
                             navBackStack.replaceAll(GithubStoreGraph.AuthenticationScreen)
                         }
+                    )
+                }
+
+                val latestAppVersion = state.latestAppVersion
+                if (state.showAppUpdateDialog && latestAppVersion != null) {
+                    AppUpdateDialog(
+                        versionTag = latestAppVersion,
+                        onUpdate = { viewModel.onAction(MainAction.AppUpdateNow) },
+                        onLater = { viewModel.onAction(MainAction.AppUpdateLater) },
+                        onIgnore = { viewModel.onAction(MainAction.AppUpdateIgnore) },
                     )
                 }
 

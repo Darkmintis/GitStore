@@ -193,6 +193,9 @@
     <!-- Install status -->
     <string name="installed">Installed</string>
     <string name="update_available">Update available</string>
+    <string name="app_update_available_message">Git Store %1$s is available. Update now, later, or ignore this version.</string>
+    <string name="later">Later</string>
+    <string name="ignore">Ignore</string>
     <string name="not_available">Not available</string>
     <string name="install_latest">Install latest</string>
     <string name="install_downloaded">Install downloaded</string>

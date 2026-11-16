@@ -12,17 +12,22 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.darkmintis.gitstore.app.app_state.AppStateManager
+import com.darkmintis.gitstore.core.data.GitStoreSelfUpdate
+import com.darkmintis.gitstore.core.data.GitStoreUpdatePreferences
 import com.darkmintis.gitstore.core.data.services.PackageMonitor
 import com.darkmintis.gitstore.core.data.data_source.TokenDataSource
 import com.darkmintis.gitstore.core.domain.repository.InstalledAppsRepository
 import com.darkmintis.gitstore.core.domain.repository.ThemesRepository
+import com.darkmintis.gitstore.core.presentation.utils.BrowserHelper
 
 class MainViewModel(
     private val tokenDataSource: TokenDataSource,
     private val themesRepository: ThemesRepository,
     private val appStateManager: AppStateManager,
     private val packageMonitor: PackageMonitor,
-    private val installedAppsRepository: InstalledAppsRepository
+    private val installedAppsRepository: InstalledAppsRepository,
+    private val updatePreferences: GitStoreUpdatePreferences,
+    private val browserHelper: BrowserHelper,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(MainState())
@@ -130,12 +135,57 @@ class MainViewModel(
 
             installedAppsRepository.checkAllForUpdates()
         }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            checkForAppUpdate()
+        }
+    }
+
+    private suspend fun checkForAppUpdate() {
+        val release = GitStoreSelfUpdate.fetchLatest() ?: return
+        val current = BuildConfig.VERSION_NAME
+        if (GitStoreSelfUpdate.compareVersions(release.versionTag, current) <= 0) return
+
+        val ignored = updatePreferences.getIgnoredVersion()
+        if (ignored != null &&
+            GitStoreSelfUpdate.compareVersions(release.versionTag, ignored) <= 0
+        ) {
+            return
+        }
+
+        _state.update {
+            it.copy(
+                showAppUpdateDialog = true,
+                latestAppVersion = release.versionTag,
+                latestAppDownloadUrl = release.downloadUrl,
+            )
+        }
     }
 
     fun onAction(action: MainAction) {
         when (action) {
             MainAction.DismissRateLimitDialog -> {
                 appStateManager.dismissRateLimitDialog()
+            }
+
+            MainAction.AppUpdateLater -> {
+                _state.update { it.copy(showAppUpdateDialog = false) }
+            }
+
+            MainAction.AppUpdateIgnore -> {
+                val version = _state.value.latestAppVersion
+                viewModelScope.launch {
+                    if (version != null) updatePreferences.ignoreVersion(version)
+                    _state.update { it.copy(showAppUpdateDialog = false) }
+                }
+            }
+
+            MainAction.AppUpdateNow -> {
+                val url = _state.value.latestAppDownloadUrl
+                _state.update { it.copy(showAppUpdateDialog = false) }
+                if (!url.isNullOrBlank()) {
+                    browserHelper.openUrl(url)
+                }
             }
         }
     }
