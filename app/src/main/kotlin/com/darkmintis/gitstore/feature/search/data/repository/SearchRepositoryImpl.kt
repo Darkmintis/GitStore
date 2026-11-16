@@ -9,12 +9,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -34,6 +32,11 @@ import com.darkmintis.gitstore.feature.search.domain.repository.SearchRepository
 import com.darkmintis.gitstore.network.RateLimitException
 import com.darkmintis.gitstore.network.safeApiCall
 
+/**
+ * GitHub repo search → keep repos whose latest release has an `.apk`.
+ *
+ * Wide GitHub query, `per_page=100`, allow forks, skip empty verified pages.
+ */
 class SearchRepositoryImpl(
     private val githubNetworkClient: HttpClient,
     private val appStateManager: AppStateManager
@@ -41,278 +44,37 @@ class SearchRepositoryImpl(
     private val releaseCheckCache = LruCache<String, GithubRepoSummary>(maxSize = 500)
     private val cacheMutex = Mutex()
 
+    private companion object {
+        const val PER_PAGE = 100
+        const val VERIFY_CONCURRENCY = 15
+        const val PER_CHECK_TIMEOUT_MS = 2_000L
+        const val MAX_AUTO_SKIP_PAGES = 3
+    }
+
     override fun searchRepositories(
         query: String,
         language: ProgrammingLanguage,
         page: Int,
         sortBy: SortBy,
     ): Flow<PaginatedRepos> = channelFlow {
-        val perPage = 30
         val searchQuery = buildSearchQuery(query, language)
         val (sort, order) = sortBy.toGithubParams()
 
         try {
-            val responseResult = githubNetworkClient.safeApiCall<GithubRepoSearchResponse>(
-                rateLimitHandler = appStateManager.rateLimitHandler,
-                autoRetryOnRateLimit = false
-            ) {
-                get("/search/repositories") {
-                    parameter("q", searchQuery)
-                    parameter("per_page", perPage)
-                    parameter("page", page)
-                    if (sort != null) {
-                        parameter("sort", sort)
-                        parameter("order", order)
-                    }
-                }
-            }
+            var currentPage = page
+            var pagesSkipped = 0
 
-            val response = responseResult.getOrElse { error ->
-                if (error is RateLimitException) {
-                    appStateManager.updateRateLimit(error.rateLimitInfo)
-                }
-                throw error
-            }
+            while (pagesSkipped <= MAX_AUTO_SKIP_PAGES) {
+                currentCoroutineContext().ensureActive()
 
-            val total = response.totalCount
-            val baseHasMore = (page * perPage) < total && response.items.isNotEmpty()
-
-            if (page == 1) {
-                val tunedTargetCount = 24
-                val tunedMinFirstEmit = 4
-                val tunedVerifyConcurrency = 12
-                val tunedPerCheckTimeoutMs = 1400L
-                val tunedMaxBackfillPages = 3
-                val tunedEarlyFallbackTimeoutMs = 0L
-                val tunedCandidatesPerPage = 50
-                val rawFallbackFirstItems = emptyList<GithubRepoSummary>()
-
-                val strict = runStrictFirstRender(
-                    firstPageItems = response.items,
-                    searchQuery = searchQuery,
-                    sort = sort,
-                    order = order,
-                    perPage = perPage,
-                    startPage = page,
-                    targetCount = tunedTargetCount,
-                    minFirstEmit = tunedMinFirstEmit,
-                    verifyConcurrency = tunedVerifyConcurrency,
-                    perCheckTimeoutMs = tunedPerCheckTimeoutMs,
-                    maxBackfillPages = tunedMaxBackfillPages,
-                    earlyFallbackTimeoutMs = tunedEarlyFallbackTimeoutMs,
-                    rawFallbackItems = rawFallbackFirstItems,
-                    candidatesPerPage = tunedCandidatesPerPage
-                ) { growingVerified ->
-                    if (growingVerified.isNotEmpty()) {
-                        send(
-                            PaginatedRepos(
-                                repos = rankSearchResults(growingVerified, query),
-                                hasMore = true,
-                                nextPageIndex = page + 1,
-                                totalCount = total
-                            )
-                        )
-                    }
-                }
-
-                send(
-                    PaginatedRepos(
-                        repos = rankSearchResults(strict.verified, query),
-                        hasMore = strict.hasMore,
-                        nextPageIndex = strict.nextPageIndex,
-                        totalCount = total
-                    )
-                )
-            } else {
-                if (response.items.isNotEmpty()) {
-                    val semaphore = Semaphore(10)
-                    val timeoutMs = 2000L
-
-                    val deferredChecks = coroutineScope {
-                        response.items.map { repo ->
-                            async {
-                                try {
-                                    semaphore.withPermit {
-                                        withTimeoutOrNull(timeoutMs) {
-                                            checkRepoHasInstallersCached(repo)
-                                        }
-                                    }
-                                } catch (_: CancellationException) {
-                                    null
-                                }
-                            }
-                        }
-                    }
-
-                    val filtered = buildList {
-                        for (i in response.items.indices) {
-                            currentCoroutineContext().ensureActive()
-                            val result = try {
-                                deferredChecks[i].await()
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (_: Exception) {
-                                null
-                            }
-                            if (result != null) add(result)
-                        }
-                    }
-
-                    if (filtered.isNotEmpty() || !baseHasMore) {
-                        send(
-                            PaginatedRepos(
-                                repos = rankSearchResults(filtered, query),
-                                hasMore = baseHasMore,
-                                nextPageIndex = page + 1,
-                                totalCount = total
-                            )
-                        )
-                    } else {
-                        send(
-                            PaginatedRepos(
-                                repos = emptyList(),
-                                hasMore = true,
-                                nextPageIndex = page + 1,
-                                totalCount = total
-                            )
-                        )
-                    }
-                } else {
-                    send(
-                        PaginatedRepos(
-                            repos = emptyList(),
-                            hasMore = false,
-                            nextPageIndex = page + 1,
-                            totalCount = total
-                        )
-                    )
-                }
-            }
-        } catch (e: CancellationException) {
-            throw e
-        }
-    }.flowOn(Dispatchers.IO)
-
-    private fun buildSearchQuery(
-        userQuery: String,
-        language: ProgrammingLanguage
-    ): String {
-        val clean = userQuery.trim()
-        val q = if (clean.isBlank()) {
-            "stars:>100"
-        } else {
-            if (clean.any { it.isWhitespace() }) "\"$clean\"" else clean
-        }
-        // Drop readme — it floods results with repos that only mention the query.
-        val scope = if (clean.any { it.isWhitespace() }) {
-            " in:name,description"
-        } else {
-            " in:name"
-        }
-        val common = " archived:false fork:false"
-
-        val languageFilter = if (language != ProgrammingLanguage.All && language.queryValue != null) {
-            " language:${language.queryValue}"
-        } else {
-            ""
-        }
-
-        return ("$q$scope$common" + languageFilter).trim()
-    }
-
-    private data class StrictResult(
-        val verified: List<GithubRepoSummary>,
-        val hasMore: Boolean,
-        val nextPageIndex: Int
-    )
-
-    private suspend fun runStrictFirstRender(
-        firstPageItems: List<GithubRepoNetworkModel>,
-        searchQuery: String,
-        sort: String?,
-        order: String,
-        perPage: Int,
-        startPage: Int,
-        targetCount: Int,
-        minFirstEmit: Int,
-        verifyConcurrency: Int,
-        perCheckTimeoutMs: Long,
-        maxBackfillPages: Int,
-        earlyFallbackTimeoutMs: Long,
-        rawFallbackItems: List<GithubRepoSummary>,
-        candidatesPerPage: Int,
-        onEarlyEmit: suspend (growingVerified: List<GithubRepoSummary>) -> Unit
-    ): StrictResult {
-        return coroutineScope {
-            var lastFetchedPage = startPage
-            val verified = mutableListOf<GithubRepoSummary>()
-            var emittedOnce = false
-
-            val fallbackJob = if (rawFallbackItems.isNotEmpty() && earlyFallbackTimeoutMs > 0) {
-                launch {
-                    delay(earlyFallbackTimeoutMs)
-                    if (!emittedOnce) {
-                        emittedOnce = true
-                        onEarlyEmit(rawFallbackItems)
-                    }
-                }
-            } else null
-
-            suspend fun verifyBatch(items: List<GithubRepoNetworkModel>) {
-                val semaphore = Semaphore(verifyConcurrency)
-
-                val deferred = coroutineScope {
-                    items.map { repo ->
-                        async {
-                            try {
-                                semaphore.withPermit {
-                                    withTimeoutOrNull(perCheckTimeoutMs) {
-                                        checkRepoHasInstallersCached(repo)
-                                    }
-                                }
-                            } catch (_: CancellationException) {
-                                null
-                            }
-                        }
-                    }
-                }
-
-                for (i in items.indices) {
-                    currentCoroutineContext().ensureActive()
-                    val res = try {
-                        deferred[i].await()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        null
-                    }
-                    if (res != null) {
-                        verified.add(res)
-                        if (!emittedOnce && (verified.size >= minFirstEmit)) {
-                            emittedOnce = true
-                            fallbackJob?.cancel()
-                            onEarlyEmit(verified.toList())
-                        }
-                        if (verified.size >= targetCount) return
-                    }
-                }
-            }
-
-            verifyBatch(firstPageItems.take(candidatesPerPage))
-
-            var hasMore = true
-            var nextPageIndex = startPage + 1
-            var pagesFetched = 0
-            while (verified.size < targetCount && hasMore && pagesFetched < maxBackfillPages) {
-                val nextPage = lastFetchedPage + 1
-                val respResult = githubNetworkClient.safeApiCall<GithubRepoSearchResponse>(
+                val responseResult = githubNetworkClient.safeApiCall<GithubRepoSearchResponse>(
                     rateLimitHandler = appStateManager.rateLimitHandler,
                     autoRetryOnRateLimit = false
                 ) {
                     get("/search/repositories") {
                         parameter("q", searchQuery)
-                        parameter("per_page", perPage)
-                        parameter("page", nextPage)
+                        parameter("per_page", PER_PAGE)
+                        parameter("page", currentPage)
                         if (sort != null) {
                             parameter("sort", sort)
                             parameter("order", order)
@@ -320,46 +82,111 @@ class SearchRepositoryImpl(
                     }
                 }
 
-                val resp = respResult.getOrElse { error ->
+                val response = responseResult.getOrElse { error ->
                     if (error is RateLimitException) {
                         appStateManager.updateRateLimit(error.rateLimitInfo)
                     }
                     throw error
                 }
 
-                if (resp.items.isEmpty()) {
-                    hasMore = false
-                    nextPageIndex = nextPage
-                    break
+                val total = response.totalCount
+                val baseHasMore =
+                    (currentPage * PER_PAGE) < total && response.items.isNotEmpty()
+
+                if (response.items.isEmpty()) {
+                    send(
+                        PaginatedRepos(
+                            repos = emptyList(),
+                            hasMore = false,
+                            nextPageIndex = currentPage + 1,
+                            totalCount = total,
+                        )
+                    )
+                    return@channelFlow
                 }
 
-                verifyBatch(resp.items.take(candidatesPerPage))
+                val verified = verifyBatch(response.items)
 
-                lastFetchedPage = nextPage
-                pagesFetched++
-
-                hasMore = (lastFetchedPage * perPage) < resp.totalCount && resp.items.isNotEmpty()
-                nextPageIndex = lastFetchedPage + 1
-            }
-
-            if (!emittedOnce) {
-                fallbackJob?.cancel()
                 if (verified.isNotEmpty()) {
-                    onEarlyEmit(verified.toList())
+                    send(
+                        PaginatedRepos(
+                            repos = rankSearchResults(verified, query),
+                            hasMore = baseHasMore,
+                            nextPageIndex = currentPage + 1,
+                            totalCount = total,
+                        )
+                    )
+                    return@channelFlow
                 }
+
+                if (!baseHasMore) {
+                    send(
+                        PaginatedRepos(
+                            repos = emptyList(),
+                            hasMore = false,
+                            nextPageIndex = currentPage + 1,
+                            totalCount = total,
+                        )
+                    )
+                    return@channelFlow
+                }
+
+                currentPage++
+                pagesSkipped++
             }
 
-            StrictResult(
-                verified = verified.toList(),
-                hasMore = hasMore,
-                nextPageIndex = nextPageIndex
+            send(
+                PaginatedRepos(
+                    repos = emptyList(),
+                    hasMore = true,
+                    nextPageIndex = currentPage + 1,
+                    totalCount = null,
+                )
             )
+        } catch (e: CancellationException) {
+            throw e
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private suspend fun verifyBatch(
+        items: List<GithubRepoNetworkModel>,
+    ): List<GithubRepoSummary> {
+        val semaphore = Semaphore(VERIFY_CONCURRENCY)
+
+        val deferredChecks = coroutineScope {
+            items.map { repo ->
+                async {
+                    try {
+                        semaphore.withPermit {
+                            withTimeoutOrNull(PER_CHECK_TIMEOUT_MS) {
+                                checkRepoHasInstallersCached(repo)
+                            }
+                        }
+                    } catch (_: CancellationException) {
+                        null
+                    }
+                }
+            }
+        }
+
+        return buildList {
+            for (i in items.indices) {
+                currentCoroutineContext().ensureActive()
+                val result = try {
+                    deferredChecks[i].await()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
+                if (result != null) add(result)
+            }
         }
     }
 
     private suspend fun checkRepoHasInstallers(
         repo: GithubRepoNetworkModel
-    ): GithubRepoSummary? {
+    ): InstallerCheck {
         return try {
             val releasesResult = githubNetworkClient.safeApiCall<List<GithubReleaseNetworkModel>>(
                 rateLimitHandler = appStateManager.rateLimitHandler,
@@ -377,23 +204,28 @@ class SearchRepositoryImpl(
                 }
             }
 
-            val allReleases = releasesResult.getOrNull() ?: return null
+            val allReleases = releasesResult.getOrNull()
+                ?: return InstallerCheck.Unknown
 
-            val stableRelease = allReleases.firstOrNull {
-                it.draft != true && it.prerelease != true
+            fun hasApk(release: GithubReleaseNetworkModel): Boolean =
+                release.assets.any { asset -> asset.name.lowercase().endsWith(".apk") }
+
+            // Prefer stable; fall back to a prerelease with APKs (common for active apps).
+            val release = allReleases.firstOrNull { candidate ->
+                candidate.draft != true && candidate.prerelease != true && hasApk(candidate)
+            } ?: allReleases.firstOrNull { candidate ->
+                candidate.draft != true && hasApk(candidate)
             }
 
-            if (stableRelease == null || stableRelease.assets.isEmpty()) {
-                return null
+            if (release != null) {
+                InstallerCheck.Hit(repo.toSummary())
+            } else {
+                InstallerCheck.Miss
             }
-
-            val hasRelevantAssets = stableRelease.assets.any { asset ->
-                asset.name.lowercase().endsWith(".apk")
-            }
-
-            if (hasRelevantAssets) repo.toSummary() else null
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
-            null
+            InstallerCheck.Unknown
         }
     }
 
@@ -401,22 +233,29 @@ class SearchRepositoryImpl(
         repo: GithubRepoNetworkModel
     ): GithubRepoSummary? {
         val key = "${repo.owner.login}/${repo.name}"
-        val cached = cacheMutex.withLock {
-            if (releaseCheckCache.contains(key)) releaseCheckCache.get(key) else null
-        }
-        if (cached != null || cacheMutex.withLock {
-                releaseCheckCache.contains(key) && releaseCheckCache.get(
-                    key
-                ) == null
-            }) {
-            return cached
+        cacheMutex.withLock {
+            if (releaseCheckCache.contains(key)) {
+                return releaseCheckCache.get(key)
+            }
         }
 
-        val result = checkRepoHasInstallers(repo)
-        cacheMutex.withLock {
-            releaseCheckCache.put(key, result)
+        return when (val check = checkRepoHasInstallers(repo)) {
+            is InstallerCheck.Hit -> {
+                cacheMutex.withLock { releaseCheckCache.put(key, check.repo) }
+                check.repo
+            }
+            InstallerCheck.Miss -> {
+                cacheMutex.withLock { releaseCheckCache.put(key, null) }
+                null
+            }
+            InstallerCheck.Unknown -> null
         }
-        return result
+    }
+
+    private sealed class InstallerCheck {
+        data class Hit(val repo: GithubRepoSummary) : InstallerCheck()
+        data object Miss : InstallerCheck()
+        data object Unknown : InstallerCheck()
     }
 }
 
@@ -440,3 +279,28 @@ private fun nameRank(name: String, needle: String): Int = when {
     else -> 3
 }
 
+/**
+ * Quoted term, name+description, allow forks.
+ * `fork:false` was dropping mirrors/forks that still ship APKs.
+ */
+internal fun buildSearchQuery(
+    userQuery: String,
+    language: ProgrammingLanguage
+): String {
+    val clean = userQuery.trim()
+    val q = if (clean.isBlank()) {
+        "stars:>100"
+    } else {
+        "\"$clean\""
+    }
+    val scope = " in:name,description"
+    val common = " archived:false fork:true"
+
+    val languageFilter = if (language != ProgrammingLanguage.All && language.queryValue != null) {
+        " language:${language.queryValue}"
+    } else {
+        ""
+    }
+
+    return ("$q$scope$common" + languageFilter).trim()
+}
