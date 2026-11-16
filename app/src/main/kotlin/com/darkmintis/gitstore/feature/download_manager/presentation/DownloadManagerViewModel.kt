@@ -141,6 +141,7 @@ class DownloadManagerViewModel(
                 )
             }
 
+        val ownPackage = context.packageName
         (inFlightOnly + fromDisk)
             .distinctBy { it.fileName }
             .map { item ->
@@ -149,6 +150,18 @@ class DownloadManagerViewModel(
                 } else {
                     item
                 }
+            }
+            .filterNot { item ->
+                val drop = isGitStoreSelfUpdateDownload(
+                    fileName = item.fileName,
+                    apkPackageName = item.packageName,
+                    ownPackageName = ownPackage,
+                )
+                if (drop) {
+                    // Keep Downloads clean: remove leftover Settings self-update APKs.
+                    runCatching { downloader.cancelDownload(item.fileName) }
+                }
+                drop
             }
     }
 
