@@ -21,6 +21,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import com.darkmintis.gitstore.app.app_state.AppStateManager
 import com.darkmintis.gitstore.core.domain.model.GithubRepoSummary
 import com.darkmintis.gitstore.core.data.mappers.toSummary
+import com.darkmintis.gitstore.feature.home.data.data_source.CachedTrendingDataSource
+import com.darkmintis.gitstore.feature.home.data.data_source.TrendingResult
+import com.darkmintis.gitstore.feature.home.data.data_source.toGithubRepoSummary
 import com.darkmintis.gitstore.core.data.model.GithubRepoNetworkModel
 import com.darkmintis.gitstore.core.data.model.GithubRepoSearchResponse
 import com.darkmintis.gitstore.feature.home.domain.model.PaginatedRepos
@@ -39,8 +42,13 @@ import com.darkmintis.gitstore.network.safeApiCall
  */
 class SearchRepositoryImpl(
     private val githubNetworkClient: HttpClient,
-    private val appStateManager: AppStateManager
+    private val appStateManager: AppStateManager,
+    private val catalogSource: CachedTrendingDataSource,
 ) : SearchRepository {
+    private var catalog: TrendingResult? = null
+    private var lastCatalogAttemptMs = 0L
+    private val catalogMutex = Mutex()
+
     private val releaseCheckCache = LruCache<String, GithubRepoSummary>(maxSize = 500)
     private val cacheMutex = Mutex()
 
@@ -49,6 +57,25 @@ class SearchRepositoryImpl(
         const val VERIFY_CONCURRENCY = 15
         const val PER_CHECK_TIMEOUT_MS = 2_000L
         const val MAX_AUTO_SKIP_PAGES = 3
+
+        /** Local hits needed before we skip the (rate-limited) live GitHub search. */
+        const val LOCAL_ENOUGH = 10
+        const val CATALOG_RETRY_MS = 60 * 60 * 1000L
+    }
+
+    /** GitStore-data catalog: memory → disk → jsDelivr. Empty when nothing is reachable. */
+    private suspend fun loadCatalog(): List<GithubRepoSummary> = catalogMutex.withLock {
+        var current = catalog ?: catalogSource.loadCached()
+        val stale = current == null || !catalogSource.isFresh(current)
+        val now = System.currentTimeMillis()
+        // Retry at most hourly: right after midnight the CDN may still serve yesterday's file.
+        if (stale && now - lastCatalogAttemptMs > CATALOG_RETRY_MS) {
+            lastCatalogAttemptMs = now
+            val fresh = catalogSource.refresh()
+            if (fresh.hasData) current = fresh
+        }
+        catalog = current
+        current?.repos?.map { it.toGithubRepoSummary() }.orEmpty()
     }
 
     override fun searchRepositories(
@@ -59,6 +86,25 @@ class SearchRepositoryImpl(
     ): Flow<PaginatedRepos> = channelFlow {
         val searchQuery = buildSearchQuery(query, language)
         val (sort, order) = sortBy.toGithubParams()
+
+        // Local catalog first: instant, and costs no GitHub API calls.
+        var hadLocal = false
+        if (page == 1 && query.isNotBlank()) {
+            val local = searchCatalog(loadCatalog(), query, language, sortBy)
+            if (local.isNotEmpty()) {
+                hadLocal = true
+                val enough = local.size >= LOCAL_ENOUGH
+                send(
+                    PaginatedRepos(
+                        repos = local,
+                        hasMore = !enough,
+                        nextPageIndex = if (enough) 2 else 1,
+                        totalCount = local.size,
+                    )
+                )
+                if (enough) return@channelFlow
+            }
+        }
 
         try {
             var currentPage = page
@@ -145,6 +191,9 @@ class SearchRepositoryImpl(
             )
         } catch (e: CancellationException) {
             throw e
+        } catch (e: Exception) {
+            // Local hits are already on screen; a failed live top-up shouldn't replace them with an error.
+            if (!hadLocal) throw e
         }
     }.flowOn(Dispatchers.IO)
 
@@ -256,6 +305,31 @@ class SearchRepositoryImpl(
         data class Hit(val repo: GithubRepoSummary) : InstallerCheck()
         data object Miss : InstallerCheck()
         data object Unknown : InstallerCheck()
+    }
+}
+
+/**
+ * Case-insensitive match of every query word against name, description and topics.
+ * Pure function so it can be unit-tested without a network.
+ */
+internal fun searchCatalog(
+    catalog: List<GithubRepoSummary>,
+    query: String,
+    language: ProgrammingLanguage,
+    sortBy: SortBy,
+): List<GithubRepoSummary> {
+    val words = query.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    if (words.isEmpty()) return emptyList()
+    val hits = catalog.filter { repo ->
+        val haystack = "${repo.fullName} ${repo.description.orEmpty()} ${repo.topics.orEmpty().joinToString(" ")}".lowercase()
+        words.all { it in haystack } &&
+            (language == ProgrammingLanguage.All || language.queryValue == null ||
+                repo.language.equals(language.queryValue, ignoreCase = true))
+    }
+    return when (sortBy) {
+        SortBy.MostStars -> hits.sortedByDescending { it.stargazersCount }
+        SortBy.MostForks -> hits.sortedByDescending { it.forksCount }
+        SortBy.BestMatch -> rankSearchResults(hits.sortedByDescending { it.stargazersCount }, query)
     }
 }
 

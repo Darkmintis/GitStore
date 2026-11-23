@@ -215,7 +215,8 @@ val searchModule: Module = module {
     single<SearchRepository> {
         SearchRepositoryImpl(
             githubNetworkClient = get(),
-            appStateManager = get()
+            appStateManager = get(),
+            catalogSource = get(named("catalog")),
         )
     }
 
