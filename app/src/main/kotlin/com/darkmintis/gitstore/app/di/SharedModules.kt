@@ -4,6 +4,8 @@ import android.app.Application
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.viewModel
+import org.koin.core.scope.Scope
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import com.darkmintis.gitstore.MainViewModel
 import com.darkmintis.gitstore.app.app_state.AppStateManager
@@ -153,6 +155,11 @@ val authModule: Module = module {
     }
 }
 
+private fun Scope.dataSource(folder: String) = CachedTrendingDataSource(
+    cacheFile = java.io.File(androidContext().filesDir, "${folder}_apps.json"),
+    folder = folder,
+)
+
 val homeModule: Module = module {
     // Repository
     single<HomeRepository> {
@@ -160,6 +167,8 @@ val homeModule: Module = module {
             githubNetworkClient = get(),
             appStateManager = get(),
             cachedDataSource = get(),
+            newDataSource = get(named("new")),
+            popularDataSource = get(named("popular")),
             categoryCache = get(),
         )
     }
@@ -181,6 +190,11 @@ val homeModule: Module = module {
             )
         )
     }
+
+    // One snapshot per GitStore-data folder; the catalog (used by search) is registered in searchModule.
+    single<CachedTrendingDataSource>(named("new")) { dataSource("new") }
+    single<CachedTrendingDataSource>(named("popular")) { dataSource("popular") }
+    single<CachedTrendingDataSource>(named("catalog")) { dataSource("catalog") }
 
     // ViewModel
     viewModel {

@@ -44,22 +44,37 @@ class HomeRepositoryImpl(
     private val githubNetworkClient: HttpClient,
     private val appStateManager: AppStateManager,
     private val cachedDataSource: CachedTrendingDataSource,
+    private val newDataSource: CachedTrendingDataSource,
+    private val popularDataSource: CachedTrendingDataSource,
     private val categoryCache: HomeCategoryCache,
 ) : HomeRepository {
 
-        override fun getTrendingRepositories(
+    override fun getTrendingRepositories(
         page: Int,
         forceRefresh: Boolean,
         isOffline: Boolean,
+    ): Flow<PaginatedRepos> =
+        cdnFlow(cachedDataSource, page, forceRefresh, isOffline) { searchReposWithInstallersFlow(page) }
+
+    /**
+     * Serves a GitStore-data list (saved copy first, then jsDelivr). The live GitHub flow is
+     * only a last resort when the CDN has nothing, so normal use costs zero API calls.
+     */
+    private fun cdnFlow(
+        source: CachedTrendingDataSource,
+        page: Int,
+        forceRefresh: Boolean,
+        isOffline: Boolean,
+        live: () -> Flow<PaginatedRepos>,
     ): Flow<PaginatedRepos> = flow {
         if (page == 1) {
             // Paint the saved snapshot first; only hit jsDelivr when it is stale or forced.
-            val cached = cachedDataSource.loadCached()
+            val cached = source.loadCached()
             if (cached != null && cached.hasData) {
                 Logger.d { "Serving ${cached.repos.size} saved trending repos immediately" }
                 emit(cached.toPaginated(isFromCache = true))
                 if (isOffline) return@flow
-                if (!forceRefresh && cachedDataSource.isFresh(cached)) return@flow
+                if (!forceRefresh && source.isFresh(cached)) return@flow
             } else if (isOffline) {
                 Logger.d { "No saved trending list while offline" }
                 emit(
@@ -73,7 +88,7 @@ class HomeRepositoryImpl(
                 return@flow
             }
 
-            val fresh = cachedDataSource.refresh()
+            val fresh = source.refresh()
             if (fresh.hasData) {
                 emit(fresh.toPaginated(isFromCache = false))
                 return@flow
@@ -98,7 +113,7 @@ class HomeRepositoryImpl(
             Logger.d { "No cached data available, falling back to live API" }
         }
 
-        emitAll(searchReposWithInstallersFlow(page))
+        emitAll(live())
 
     }.flowOn(Dispatchers.IO)
 
@@ -256,14 +271,16 @@ class HomeRepositoryImpl(
             .toLocalDateTime(TimeZone.UTC)
             .date
 
-        return cachedCategoryFlow("new", page, forceRefresh, isOffline) {
-            searchReposWithInstallersFlow(
-                baseQuery = "stars:>5 archived:false created:>=$thirtyDaysAgo",
-                sort = "created",
-                order = "desc",
-                startPage = page,
-                cacheKey = "new",
-            )
+        return cdnFlow(newDataSource, page, forceRefresh, isOffline) {
+            cachedCategoryFlow("new", page, forceRefresh, isOffline) {
+                searchReposWithInstallersFlow(
+                    baseQuery = "stars:>5 archived:false created:>=$thirtyDaysAgo",
+                    sort = "created",
+                    order = "desc",
+                    startPage = page,
+                    cacheKey = "new",
+                )
+            }
         }
     }
 
@@ -541,6 +558,7 @@ class HomeRepositoryImpl(
                     appStateManager.updateRateLimit(error.rateLimitInfo)
                 }
             }
+            val allReleases = releasesResult.getOrNull() ?: return null
 
             fun hasApk(release: GithubReleaseNetworkModel) =
                 release.assets.any { it.name.lowercase().endsWith(".apk") }
@@ -549,13 +567,8 @@ class HomeRepositoryImpl(
             val release = allReleases.firstOrNull { it.draft != true && it.prerelease != true && hasApk(it) }
                 ?: allReleases.firstOrNull { it.draft != true && hasApk(it) }
 
-            if (relevantAssets.isNotEmpty()) {
-                repo.toSummary()
-            } else {
-                null
-            }
+            if (release != null) repo.toSummary() else null
         } catch (e: Exception) {
-            val allReleases = releasesResult.getOrNull() ?: return null
             null
         }
     }
