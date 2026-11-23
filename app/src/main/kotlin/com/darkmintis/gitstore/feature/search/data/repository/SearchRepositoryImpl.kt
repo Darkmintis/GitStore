@@ -58,8 +58,11 @@ class SearchRepositoryImpl(
         const val PER_CHECK_TIMEOUT_MS = 2_000L
         const val MAX_AUTO_SKIP_PAGES = 3
 
-        /** Local hits needed before we skip the (rate-limited) live GitHub search. */
-        const val LOCAL_ENOUGH = 10
+        /**
+         * Release checks cost one API call each (60/hr anonymous), so when the live search is
+         * only a fallback for a catalog miss, probe just the best name matches.
+         */
+        const val LIVE_VERIFY_CAP = 20
         const val CATALOG_RETRY_MS = 60 * 60 * 1000L
     }
 
@@ -88,21 +91,23 @@ class SearchRepositoryImpl(
         val (sort, order) = sortBy.toGithubParams()
 
         // Local catalog first: instant, and costs no GitHub API calls.
-        var hadLocal = false
+        var catalogLoaded = false
         if (page == 1 && query.isNotBlank()) {
-            val local = searchCatalog(loadCatalog(), query, language, sortBy)
+            val all = loadCatalog()
+            catalogLoaded = all.isNotEmpty()
+            val local = searchCatalog(all, query, language, sortBy)
             if (local.isNotEmpty()) {
-                hadLocal = true
-                val enough = local.size >= LOCAL_ENOUGH
+                // A catalog hit is enough: the live search would spend the whole rate limit
+                // on release checks just to add lower-ranked repos.
                 send(
                     PaginatedRepos(
                         repos = local,
-                        hasMore = !enough,
-                        nextPageIndex = if (enough) 2 else 1,
+                        hasMore = false,
+                        nextPageIndex = 2,
                         totalCount = local.size,
                     )
                 )
-                if (enough) return@channelFlow
+                return@channelFlow
             }
         }
 
@@ -151,7 +156,12 @@ class SearchRepositoryImpl(
                     return@channelFlow
                 }
 
-                val verified = verifyBatch(response.items)
+                val candidates = if (catalogLoaded) {
+                    rankByName(response.items, query).take(LIVE_VERIFY_CAP)
+                } else {
+                    response.items
+                }
+                val verified = verifyBatch(candidates)
 
                 if (verified.isNotEmpty()) {
                     send(
@@ -191,9 +201,6 @@ class SearchRepositoryImpl(
             )
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            // Local hits are already on screen; a failed live top-up shouldn't replace them with an error.
-            if (!hadLocal) throw e
         }
     }.flowOn(Dispatchers.IO)
 
@@ -331,6 +338,12 @@ internal fun searchCatalog(
         SortBy.MostForks -> hits.sortedByDescending { it.forksCount }
         SortBy.BestMatch -> rankSearchResults(hits.sortedByDescending { it.stargazersCount }, query)
     }
+}
+
+/** Same name ordering as [rankSearchResults], for raw GitHub items (stable on ties). */
+private fun rankByName(items: List<GithubRepoNetworkModel>, query: String): List<GithubRepoNetworkModel> {
+    val needle = query.trim().lowercase()
+    return items.sortedBy { nameRank(it.name.lowercase(), needle) }
 }
 
 /** Prefer exact / prefix name matches so queries like "termux" surface the real app. */
