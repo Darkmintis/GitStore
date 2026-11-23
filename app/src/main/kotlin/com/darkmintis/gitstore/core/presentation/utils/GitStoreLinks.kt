@@ -12,9 +12,9 @@ object GitStoreLinks {
     const val NEW_BUG_REPORT =
         "https://github.com/Darkmintis/GitStore/issues/new?template=bug_report.yml"
 
-    /** v1.5+ catalog / trending CDN (GitStore-data). */
-    const val DATA_CDN_TRENDING =
-        "https://cdn.jsdelivr.net/gh/Darkmintis/GitStore-data@main/trending"
+    /** v1.5+ data CDN (GitStore-data): trending/, new/, popular/, catalog/ each hold apps.json. */
+    const val DATA_CDN_BASE = "https://cdn.jsdelivr.net/gh/Darkmintis/GitStore-data@main"
+    const val DATA_CDN_TRENDING = "$DATA_CDN_BASE/trending"
 
     /**
      * Pre-1.5 clients still read this path. Keep publishing here until those

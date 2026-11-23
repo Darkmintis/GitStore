@@ -19,6 +19,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
@@ -39,7 +41,6 @@ const val TRENDING_CACHE_FILE_NAME = "trending_apps.json"
  * fallback. Serving it would present stale content as if it were current.
  */
 private val MAX_CACHE_AGE = 48.hours
-private val FRESH_CACHE_AGE = 24.hours
 
 /**
  * A saved snapshot is only useful while it is recent enough to still reflect the daily list.
@@ -62,6 +63,8 @@ internal fun isSnapshotFresh(
  */
 class CachedTrendingDataSource(
     private val cacheFile: File,
+    /** GitStore-data folder to read: trending, new, popular or catalog. */
+    folder: String = "trending",
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -89,15 +92,16 @@ class CachedTrendingDataSource(
      * cache headers, so the Trending seed list loads fast everywhere instead of depending on
      * GitHub's plain file server.
      *
-     * `@main` is deliberate — jsDelivr revalidates branch refs within minutes, so the daily
-     * run of scripts/discover.py propagates to users automatically. Never pin this to a tag
-     * or SHA: those are cached immutably for a year and would freeze users on day-one data.
+     * `@main` is deliberate: tags/SHAs are cached immutably and would freeze users on day-one
+     * data. jsDelivr caches branch refs for ~12h, so the daily workflow purges the files
+     * right after pushing (see GitStore-data auto-discovery.yml).
      *
      * v1.5 reads [GitStoreLinks.DATA_CDN_TRENDING] first; legacy app-repo JSON is only a
      * bootstrap fallback if the data repo is empty/unreachable (see TODO.md).
      */
-    private val primaryBaseUrl = GitStoreLinks.DATA_CDN_TRENDING
-    private val legacyBaseUrl = GitStoreLinks.LEGACY_CDN_TRENDING
+    private val primaryBaseUrl = "${GitStoreLinks.DATA_CDN_BASE}/$folder"
+    // Only trending ever existed in the legacy app-repo path.
+    private val legacyBaseUrl = GitStoreLinks.LEGACY_CDN_TRENDING.takeIf { folder == "trending" }
 
     suspend fun loadTrending(): TrendingResult = withContext(Dispatchers.IO) {
         val fetched = fetchFromNetwork()
@@ -133,7 +137,9 @@ class CachedTrendingDataSource(
         val updated = cached.lastUpdated
             ?.let { runCatching { Instant.parse(it) }.getOrNull() }
             ?: return false
-        return (Clock.System.now() - updated) <= FRESH_CACHE_AGE
+        // Data is regenerated at 00:00 UTC, so a snapshot stays current until the next midnight.
+        val utc = TimeZone.UTC
+        return updated.toLocalDateTime(utc).date == Clock.System.now().toLocalDateTime(utc).date
     }
 
     /** Network refresh; persists the fresh snapshot on success. */
@@ -151,7 +157,7 @@ class CachedTrendingDataSource(
         if (primary != null && primary.repos.isNotEmpty()) return primary
 
         // Data repo not published yet / CDN lag — old path still updated for ≤1.4.x clients.
-        if (primary?.isOffline != true) {
+        if (legacyBaseUrl != null && primary?.isOffline != true) {
             Logger.d { "Primary trending CDN miss; trying legacy app-repo JSON" }
             val legacy = fetchTrendingJson("$legacyBaseUrl/apps.json")
             if (legacy != null && legacy.repos.isNotEmpty()) return legacy
