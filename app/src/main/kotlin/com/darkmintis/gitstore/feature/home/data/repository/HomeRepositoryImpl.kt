@@ -277,14 +277,16 @@ class HomeRepositoryImpl(
             .toLocalDateTime(TimeZone.UTC)
             .date
 
-        return cachedCategoryFlow("popular", page, forceRefresh, isOffline) {
-            searchReposWithInstallersFlow(
-                baseQuery = "stars:>50 archived:false pushed:>=$threeDaysAgo",
-                sort = "updated",
-                order = "desc",
-                startPage = page,
-                cacheKey = "popular",
-            )
+        return cdnFlow(popularDataSource, page, forceRefresh, isOffline) {
+            cachedCategoryFlow("popular", page, forceRefresh, isOffline) {
+                searchReposWithInstallersFlow(
+                    baseQuery = "stars:>50 archived:false pushed:>=$threeDaysAgo",
+                    sort = "updated",
+                    order = "desc",
+                    startPage = page,
+                    cacheKey = "popular",
+                )
+            }
         }
     }
 
@@ -534,21 +536,18 @@ class HomeRepositoryImpl(
                 }
             }
 
-            val allReleases = releasesResult.getOrNull() ?: return null
-
-            val stableRelease = allReleases.firstOrNull {
-                it.draft != true && it.prerelease != true
+            releasesResult.onFailure { error ->
+                if (error is RateLimitException) {
+                    appStateManager.updateRateLimit(error.rateLimitInfo)
+                }
             }
 
-            if (stableRelease == null || stableRelease.assets.isEmpty()) {
-                return null
-            }
+            fun hasApk(release: GithubReleaseNetworkModel) =
+                release.assets.any { it.name.lowercase().endsWith(".apk") }
 
-            val relevantAssets = stableRelease.assets.filter { asset ->
-                val name = asset.name.lowercase()
-                // Android-only: check for APK files
-                name.endsWith(".apk")
-            }
+            // Prefer stable; fall back to a prerelease with APKs (same rule as search).
+            val release = allReleases.firstOrNull { it.draft != true && it.prerelease != true && hasApk(it) }
+                ?: allReleases.firstOrNull { it.draft != true && hasApk(it) }
 
             if (relevantAssets.isNotEmpty()) {
                 repo.toSummary()
@@ -556,6 +555,7 @@ class HomeRepositoryImpl(
                 null
             }
         } catch (e: Exception) {
+            val allReleases = releasesResult.getOrNull() ?: return null
             null
         }
     }
